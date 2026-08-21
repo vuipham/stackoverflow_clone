@@ -1,0 +1,167 @@
+{
+  "dataset_size": 400,
+  "reindex": {
+    "elapsed_ms": 52.56,
+    "dimension": 185,
+    "version": 1
+  },
+  "queries": [
+    {
+      "query": "cách kết nối cơ sở dữ liệu MongoDB",
+      "relevant_tag": "mongodb",
+      "avg_ms": 0.46,
+      "min_ms": 0.394,
+      "max_ms": 0.654,
+      "top1_score": 0.3854,
+      "num_results": 10,
+      "precision_at_5": 0.0
+    },
+    {
+      "query": "lỗi khi dùng React trong dự án",
+      "relevant_tag": "react",
+      "avg_ms": 0.411,
+      "min_ms": 0.376,
+      "max_ms": 0.452,
+      "top1_score": 0.7593,
+      "num_results": 10,
+      "precision_at_5": 0.2
+    },
+    {
+      "query": "tối ưu hiệu năng Docker container",
+      "relevant_tag": "docker",
+      "avg_ms": 0.367,
+      "min_ms": 0.35,
+      "max_ms": 0.385,
+      "top1_score": 0.8284,
+      "num_results": 10,
+      "precision_at_5": 0.2
+    },
+    {
+      "query": "xác thực người dùng bằng JWT",
+      "relevant_tag": "jwt",
+      "avg_ms": 0.361,
+      "min_ms": 0.337,
+      "max_ms": 0.406,
+      "top1_score": 0.5096,
+      "num_results": 10,
+      "precision_at_5": 1.0
+    },
+    {
+      "query": "triển khai mô hình học máy",
+      "relevant_tag": "machine-learning",
+      "avg_ms": 0.313,
+      "min_ms": 0.3,
+      "max_ms": 0.335,
+      "top1_score": 0.3212,
+      "num_results": 10,
+      "precision_at_5": 0.0
+    },
+    {
+      "query": "xử lý ngôn ngữ tự nhiên tiếng Việt",
+      "relevant_tag": "nlp",
+      "avg_ms": 0.317,
+      "min_ms": 0.302,
+      "max_ms": 0.342,
+      "top1_score": 0.543,
+      "num_results": 10,
+      "precision_at_5": 0.0
+    },
+    {
+      "query": "so sánh Python với Node.js",
+      "relevant_tag": "python",
+      "avg_ms": 0.361,
+      "min_ms": 0.342,
+      "max_ms": 0.412,
+      "top1_score": 0.3561,
+      "num_results": 10,
+      "precision_at_5": 0.0
+    },
+    {
+      "query": "thiết lập Kubernetes cluster",
+      "relevant_tag": "kubernetes",
+      "avg_ms": 0.296,
+      "min_ms": 0.28,
+      "max_ms": 0.317,
+      "top1_score": 0.5778,
+      "num_results": 5,
+      "precision_at_5": 1.0
+    },
+    {
+      "query": "viết unit test cho FastAPI",
+      "relevant_tag": "fastapi",
+      "avg_ms": 0.361,
+      "min_ms": 0.34,
+      "max_ms": 0.401,
+      "top1_score": 0.5169,
+      "num_results": 10,
+      "precision_at_5": 0.0
+    },
+    {
+      "query": "tìm kiếm vector bằng Qdrant",
+      "relevant_tag": "qdrant",
+      "avg_ms": 0.305,
+      "min_ms": 0.3,
+      "max_ms": 0.32,
+      "top1_score": 0.3622,
+      "num_results": 10,
+      "precision_at_5": 0.4
+    },
+    {
+      "query": "tính độ tương đồng cosine similarity",
+      "relevant_tag": "cosine-similarity",
+      "avg_ms": 0.34,
+      "min_ms": 0.32,
+      "max_ms": 0.38,
+      "top1_score": 0.6403,
+      "num_results": 10,
+      "precision_at_5": 1.0
+    },
+    {
+      "query": "cấu hình CI/CD với GitHub Actions",
+      "relevant_tag": "github-actions",
+      "avg_ms": 0.384,
+      "min_ms": 0.365,
+      "max_ms": 0.401,
+      "top1_score": 0.4149,
+      "num_results": 10,
+      "precision_at_5": 0.2
+    },
+    {
+      "query": "deploy ứng dụng Django lên AWS",
+      "relevant_tag": "django",
+      "avg_ms": 0.397,
+      "min_ms": 0.367,
+      "max_ms": 0.436,
+      "top1_score": 0.3141,
+      "num_results": 10,
+      "precision_at_5": 0.0
+    },
+    {
+      "query": "sử dụng Redis để cache dữ liệu",
+      "relevant_tag": "redis",
+      "avg_ms": 0.359,
+      "min_ms": 0.343,
+      "max_ms": 0.378,
+      "top1_score": 0.519,
+      "num_results": 10,
+      "precision_at_5": 1.0
+    },
+    {
+      "query": "xây dựng REST API chuẩn",
+      "relevant_tag": "rest-api",
+      "avg_ms": 0.314,
+      "min_ms": 0.299,
+      "max_ms": 0.339,
+      "top1_score": 0.6529,
+      "num_results": 10,
+      "precision_at_5": 1.0
+    }
+  ],
+  "summary": {
+    "avg_response_ms": 0.356,
+    "max_response_ms": 0.46,
+    "min_response_ms": 0.296,
+    "mean_precision_at_5": 0.4,
+    "under_1s_requirement": true
+  }
+}
