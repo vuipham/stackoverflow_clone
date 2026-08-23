@@ -1,0 +1,15 @@
+# Cài THÊM (tùy chọn) sau khi đã cài xong requirements.txt, nếu muốn dùng /api/search/sbert.
+# Nếu KHÔNG cài file này: toàn bộ hệ thống vẫn chạy bình thường - TF-IDF hoạt động đầy đủ,
+# chỉ riêng /api/search/sbert trả lỗi 503 "Model SBERT chưa sẵn sàng" (đã xử lý an toàn
+# trong app/services/search/sbert_service.py, không crash app).
+#
+# Kéo theo torch + transformers + tokenizers (Rust) - khá nặng (~1-2GB) và có thể cần build
+# từ source nếu máy bạn (đặc biệt Python bản rất mới, hoặc kiến trúc CPU lạ) chưa có sẵn wheel
+# cho tokenizers, dễ ra lỗi "ModuleNotFoundError: No module named 'maturin'".
+#
+# Cài:
+#   ./venv/bin/pip install -r requirements-sbert.txt
+# Nếu lỗi thiếu maturin, thử cài maturin trước:
+#   ./venv/bin/pip install maturin
+#   ./venv/bin/pip install -r requirements-sbert.txt
+sentence-transformers==3.1.1
