@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.database import questions_col, search_benchmark_log_col
 from app.core.security import require_admin
-from app.services.search import tfidf_service, sbert_service
+from app.services.search import tfidf_service
 
 router = APIRouter(tags=["search"])
 
@@ -41,42 +41,52 @@ async def _log_benchmark(method: str, query: str, elapsed_ms: float, result_coun
 
 
 @router.get("/api/search/tfidf")
-async def search_tfidf(q: str = Query(..., min_length=1), top_k: int = Query(10, ge=1, le=50)):
+async def search_tfidf(
+    q: str = Query(..., min_length=1),
+    page: int = Query(1, ge=1),
+    size: int = Query(15, ge=1, le=50),
+    min_score: float = Query(0.0, ge=0.0, le=1.0),
+):
+    """
+    Tìm kiếm toàn bộ index TF-IDF và trả về TẤT CẢ kết quả liên quan (score > min_score),
+    sau đó phân trang tại đây. Không giới hạn số lượng kết quả — giống Stack Overflow thật.
+    """
     t0 = time.perf_counter()
-    scored = tfidf_service.search(q, top_k)
-    results = await _hydrate_results(scored)
+    # Lấy TOÀN BỘ kết quả từ RAM cache (không giới hạn top_k)
+    scored = tfidf_service.search(q, min_score=min_score)
+    all_results = await _hydrate_results(scored)
+    total = len(all_results)
+    total_pages = max(1, (total + size - 1) // size)
+    start = (page - 1) * size
+    page_results = all_results[start : start + size]
     elapsed_ms = (time.perf_counter() - t0) * 1000
-    await _log_benchmark("tfidf", q, elapsed_ms, len(results))
-    return {"method": "tfidf", "query": q, "elapsedMs": round(elapsed_ms, 2), "results": results}
-
-
-@router.get("/api/search/sbert")
-async def search_sbert(q: str = Query(..., min_length=1), top_k: int = Query(10, ge=1, le=50)):
-    t0 = time.perf_counter()
-    scored = sbert_service.search(q, top_k)
-    if scored == [] and sbert_service.get_model() is None:
-        raise HTTPException(status_code=503, detail="Model SBERT chưa sẵn sàng trên server (xem log)")
-    results = await _hydrate_results(scored)
-    elapsed_ms = (time.perf_counter() - t0) * 1000
-    await _log_benchmark("sbert", q, elapsed_ms, len(results))
-    return {"method": "sbert", "query": q, "elapsedMs": round(elapsed_ms, 2), "results": results}
+    await _log_benchmark("tfidf", q, elapsed_ms, total)
+    return {
+        "method": "tfidf",
+        "query": q,
+        "elapsedMs": round(elapsed_ms, 2),
+        "results": page_results,
+        "total": total,
+        "page": page,
+        "size": size,
+        "totalPages": total_pages,
+    }
 
 
 @router.post("/api/admin/search/reindex")
 async def trigger_reindex(_admin: dict = Depends(require_admin)):
     """
-    Xây lại toàn bộ chỉ mục (Ngày 8-13): retrain vocabulary TF-IDF + re-encode SBERT
-    cho MỌI câu hỏi hiện có. Chỉ Admin được gọi - đây là thao tác nặng, không tự động
-    chạy theo request thường (khác với index_single_question khi tạo/sửa 1 câu hỏi).
+    Xây lại toàn bộ chỉ mục TF-IDF cho MỌI câu hỏi hiện có. Chỉ Admin được gọi - đây
+    là thao tác nặng, không tự động chạy theo request thường (khác với
+    index_single_question khi tạo/sửa 1 câu hỏi).
     """
     tfidf_result = await tfidf_service.reindex_all()
-    sbert_result = await sbert_service.reindex_all()
-    return {"tfidf": tfidf_result, "sbert": sbert_result}
+    return {"tfidf": tfidf_result}
 
 
 @router.get("/api/admin/search/benchmark-log")
 async def get_benchmark_log(limit: int = Query(50, ge=1, le=500), _admin: dict = Depends(require_admin)):
-    """Xem log thời gian phản hồi gần nhất của 2 phương pháp - dùng cho báo cáo (Ngày 14/18)."""
+    """Xem log thời gian phản hồi gần nhất - dùng cho báo cáo (Ngày 14/18)."""
     cursor = search_benchmark_log_col.find({}).sort("_id", -1).limit(limit)
     logs = [{"method": l["method"], "query": l["query"], "elapsedMs": l["elapsedMs"], "resultCount": l["resultCount"]}
             async for l in cursor]

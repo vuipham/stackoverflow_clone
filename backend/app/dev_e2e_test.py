@@ -21,7 +21,6 @@ db_module.comments_col = mock_db["comments"]
 db_module.votes_col = mock_db["votes"]
 db_module.tags_col = mock_db["tags"]
 db_module.question_vectors_tfidf_col = mock_db["question_vectors_tfidf"]
-db_module.question_vectors_sbert_col = mock_db["question_vectors_sbert"]
 db_module.tfidf_vocabulary_col = mock_db["tfidf_vocabulary"]
 db_module.search_benchmark_log_col = mock_db["search_benchmark_log"]
 
@@ -37,7 +36,6 @@ import app.routers.search as search_router
 import app.services.reputation_service as reputation_service
 import app.services.tag_service as tag_service
 import app.services.search.tfidf_service as tfidf_service
-import app.services.search.sbert_service as sbert_service
 import app.core.security as security_module
 
 auth_router.users_col = mock_db["users"]
@@ -66,8 +64,6 @@ tag_service.tags_col = mock_db["tags"]
 tfidf_service.questions_col = mock_db["questions"]
 tfidf_service.question_vectors_tfidf_col = mock_db["question_vectors_tfidf"]
 tfidf_service.tfidf_vocabulary_col = mock_db["tfidf_vocabulary"]
-sbert_service.questions_col = mock_db["questions"]
-sbert_service.question_vectors_sbert_col = mock_db["question_vectors_sbert"]
 security_module.users_col = mock_db["users"]
 
 from fastapi.testclient import TestClient
@@ -140,11 +136,13 @@ async def run():
         critic_doc = await db_module.users_col.find_one({"username": "newbie_test"})
         check("Reputation người downvote giảm 1 điểm (130 -> 129)", critic_doc["reputation"] == 129)
 
-        # --- 6. Vote trùng lần 2 -> phải bị từ chối 409 ---
+        # --- 6. Vote trùng lần 2 (UC007: Hủy vote) -> trả về action="cancelled" ---
         r = client.post("/api/votes",
                          headers={"Authorization": f"Bearer {critic_token}"},
                          json={"targetType": "question", "targetId": question_id, "value": -1})
-        check("Vote trùng lần 2 bị từ chối (409)", r.status_code == 409)
+        check("Vote trùng lần 2 được xử lý hủy vote (UC007 step 3)", r.status_code == 201)
+        check("Action bằng cancelled", r.json().get("action") == "cancelled")
+        check("voteScore trở về 0 sau khi hủy downvote", r.json()["newVoteScore"] == 0)
 
         # --- 7. newbie thử sửa câu hỏi của author (không phải chủ, rep thấp) -> 403 ---
         r = client.put(f"/api/questions/{question_id}",

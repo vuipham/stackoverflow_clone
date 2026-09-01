@@ -3,8 +3,8 @@
 Đã code xong **Ngày 1–14 trong kế hoạch 3 tuần**:
 - **Tuần 1 (nền tảng):** models MongoDB, auth (JWT), phân quyền reputation-gated đầy đủ
   (question, answer, comment, vote, tag, admin), dataset mẫu 400 câu hỏi.
-- **Tuần 2 (Chức năng B - trọng tâm):** module tìm kiếm ngữ nghĩa **TF-IDF + SBERT**,
-  cosine similarity, auto re-index, admin reindex/benchmark, script benchmark Precision@K.
+- **Tuần 2 (Chức năng B - trọng tâm):** module tìm kiếm ngữ nghĩa **TF-IDF** (Vector Space
+  Model), cosine similarity, auto re-index, admin reindex/benchmark, script benchmark Precision@K.
 
 ## ✅ Đã kiểm thử thật
 Toàn bộ logic (đăng ký, đăng nhập, CRUD question/answer/comment, vote, accept-answer,
@@ -19,11 +19,6 @@ cascade delete, **và cả pipeline search TF-IDF thật (reindex + search + ben
   ```bash
   docker run -d -p 27017:27017 --name mongo mongo:7
   ```
-- (Tùy chọn nhưng cần cho SBERT) máy có kết nối Internet ở lần chạy đầu để tải model
-  pretrained từ HuggingFace (`sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`,
-  ~470MB). Nếu không có mạng / chưa cài `sentence-transformers`, **toàn bộ app vẫn chạy
-  bình thường** — chỉ riêng `/api/search/sbert` sẽ trả lỗi 503, các phần khác (kể cả
-  `/api/search/tfidf`) không bị ảnh hưởng.
 
 ## Cài đặt & chạy
 ```bash
@@ -41,12 +36,12 @@ cp .env.example .env      # chỉnh MONGO_URI/JWT_SECRET nếu cần
 Mở http://localhost:8000/docs để xem Swagger UI tự động sinh ra — có thể test API ngay trên trình duyệt.
 
 **Lưu ý quan trọng:** sau khi seed xong, phải gọi 1 lần API reindex để build vocabulary
-TF-IDF + encode SBERT cho toàn bộ dữ liệu (chưa tự động, vì đây là thao tác nặng):
+TF-IDF cho toàn bộ dữ liệu (chưa tự động, vì đây là thao tác nặng):
 ```bash
 TOKEN="<token của user admin, lấy từ /api/auth/login>"
 curl -X POST http://localhost:8000/api/admin/search/reindex -H "Authorization: Bearer $TOKEN"
 ```
-Sau đó `/api/search/tfidf?q=...` và `/api/search/sbert?q=...` mới có dữ liệu để trả về.
+Sau đó `/api/search/tfidf?q=...` mới có dữ liệu để trả về.
 Nếu chỉ muốn thử nhanh TF-IDF/benchmark mà chưa cần chạy `uvicorn`, có thể chạy thẳng:
 ```bash
 ./venv/bin/python -m app.benchmark_search   # tự reindex rồi in bảng Precision@5/@10 + thời gian
@@ -68,8 +63,7 @@ Nếu chỉ muốn thử nhanh TF-IDF/benchmark mà chưa cần chạy `uvicorn`
 ./venv/bin/pip install mongomock mongomock-motor
 ./venv/bin/python -m app.dev_e2e_test
 ```
-Bộ test tự dùng DB giả lập nên **không cần** cài `sentence-transformers`/`underthesea` để
-chạy qua — phần SBERT sẽ tự báo "model chưa sẵn sàng" và bị bỏ qua an toàn, phần TF-IDF
+Bộ test tự dùng DB giả lập nên **không cần** cài `underthesea` để chạy qua — phần TF-IDF
 chạy full pipeline thật (reindex + search bằng thuật toán TF-IDF thật, không mock).
 
 ## API tổng quan
@@ -92,11 +86,10 @@ chạy full pipeline thật (reindex + search bằng thuật toán TF-IDF thật
 
 ### Search (Chức năng B — trọng tâm)
 - `GET /api/search/tfidf?q=...&top_k=10` — Vector Space Model cổ điển, cosine similarity thủ công
-- `GET /api/search/sbert?q=...&top_k=10` — Sentence-BERT, cosine similarity trên embedding dense
-- `POST /api/admin/search/reindex` (Admin) — retrain vocab TF-IDF + re-encode SBERT cho TOÀN BỘ dữ liệu
+- `POST /api/admin/search/reindex` (Admin) — retrain vocab TF-IDF cho TOÀN BỘ dữ liệu
 - `GET /api/admin/search/benchmark-log` (Admin) — log thời gian phản hồi các lượt search gần nhất
 
-Cả 2 endpoint search trả kèm `similarityPercent` (điểm tương đồng %) để dễ giải thích khi demo/báo cáo.
+Endpoint search trả kèm `similarityPercent` (điểm tương đồng %) để dễ giải thích khi demo/báo cáo.
 
 ## Test nhanh bằng curl
 
@@ -118,7 +111,6 @@ curl -X POST http://localhost:8000/api/questions \
 **3. Tìm kiếm ngữ nghĩa (sau khi đã reindex):**
 ```bash
 curl "http://localhost:8000/api/search/tfidf?q=tim+kiem+ngu+nghia&top_k=5"
-curl "http://localhost:8000/api/search/sbert?q=tim+kiem+ngu+nghia&top_k=5"
 ```
 
 **4. Thử downvote bằng `newbie` (rep=1) → phải bị từ chối 403, rồi bằng `critic` (rep=130) → thành công** (xem `app/dev_e2e_test.py` để có kịch bản đầy đủ, gồm cả answer/comment/tag/admin/search).
@@ -127,7 +119,7 @@ curl "http://localhost:8000/api/search/sbert?q=tim+kiem+ngu+nghia&top_k=5"
 ```
 app/
   core/
-    config.py         # đọc .env (bao gồm SBERT_MODEL_NAME)
+    config.py         # đọc .env (MONGO_URI, JWT_SECRET, ...)
     database.py        # kết nối Motor + collections + ensure_indexes()
     password.py         # hash/verify password bằng bcrypt trực tiếp
     privileges.py        # bảng ngưỡng PRIVILEGE + REPUTATION_DELTA
@@ -135,20 +127,19 @@ app/
   models/             # Pydantic schemas (request/response) - question/answer/comment/tag/admin/user/vote
   routers/
     auth.py, questions.py, answers.py, comments.py, votes.py, tags.py, admin.py
-    search.py            # /api/search/tfidf, /api/search/sbert, /api/admin/search/*
+    search.py            # /api/search/tfidf, /api/admin/search/*
   services/
     reputation_service.py   # adjust_reputation() dùng chung
     tag_service.py           # đồng bộ tags collection khi tạo/sửa/xóa câu hỏi
     search/
       preprocess.py           # tiền xử lý văn bản cho TF-IDF (tokenize, bỏ stopword)
       tfidf_service.py         # build vocab, cache RAM, cosine thủ công (Vector Space Model)
-      sbert_service.py          # load model pretrained, brute-force cosine trên embedding dense
   data/
     questions_dataset.json    # 400 tiêu đề mẫu đa chủ đề (Ngày 6)
   main.py               # entry point FastAPI - load cache search lúc khởi động (lifespan)
   seed.py                # tạo admin + tài khoản test
   seed_questions.py       # nạp 400 câu hỏi mẫu vào MongoDB
-  benchmark_search.py      # script Precision@5/@10 + thời gian, TF-IDF vs SBERT (Ngày 18)
+  benchmark_search.py      # script Precision@5/@10 + thời gian (Ngày 18)
   dev_e2e_test.py           # bộ test end-to-end (dùng mongomock, không cần Mongo thật)
 ```
 
@@ -162,7 +153,7 @@ app/
   `POST/PUT /api/questions`).
 - Tag được tạo "hữu cơ" (upsert + tăng `questionCount`) mỗi khi có câu hỏi mới gắn tag đó -
   Admin chỉ cần vào sửa mô tả / xóa tag rác, không phải tạo tag trước.
-- Xóa câu hỏi cascade: xóa luôn answer/comment/vote liên quan + vector chỉ mục TF-IDF/SBERT
+- Xóa câu hỏi cascade: xóa luôn answer/comment/vote liên quan + vector chỉ mục TF-IDF
   tương ứng, tránh dữ liệu mồ côi.
 
 ### Module search (Tuần 2 - Chức năng B)
@@ -171,18 +162,10 @@ app/
   hoạch, thay vì để sklearn tự L2-normalize (nếu vậy `norm` luôn = 1, không đúng ý đồ lưu
   trữ trong `question_vectors_tfidf`). Toàn bộ vocab + vector cache trong RAM (`_cache`
   module-level) - không query lại MongoDB mỗi lần search.
-- **SBERT**: KHÔNG tự train — dùng thẳng model pretrained multilingual
-  (`paraphrase-multilingual-MiniLM-L12-v2`, phù hợp cho tiêu đề trộn tiếng Việt + thuật ngữ
-  tiếng Anh). Model load 1 lần lúc khởi động (`get_model()` singleton), embedding cache
-  thành 1 ma trận numpy đã L2-normalize để search bằng brute-force cosine (nhân ma trận) -
-  đủ nhanh (<1s) với vài trăm đến vài nghìn câu hỏi. **Khi dataset > 5.000 câu hỏi**, thay
-  bước brute-force này bằng MongoDB Atlas `$vectorSearch` (tạo Vector Search Index kiểu
-  `knnVector` trên field `embedding`, xem Phần 2.8.3 kế hoạch) hoặc Qdrant HNSW — không cần
-  đổi schema lưu trữ, chỉ đổi cách query trong `sbert_service.search()`.
 - **Auto re-index**: mỗi lần tạo/sửa title câu hỏi, `index_single_question()` được gọi ngay
-  (đồng bộ) cho cả 2 phương pháp, dùng vocab/model **hiện hành** (không retrain vocab TF-IDF
-  ở bước này). Việc **retrain lại vocab** (khi dataset tăng đáng kể, đúng lưu ý Phần 2.8.2)
-  là thao tác chủ động, chỉ Admin trigger qua `POST /api/admin/search/reindex`.
+  (đồng bộ), dùng vocab **hiện hành** (không retrain vocab TF-IDF ở bước này). Việc
+  **retrain lại vocab** (khi dataset tăng đáng kể, đúng lưu ý Phần 2.8.2) là thao tác chủ
+  động, chỉ Admin trigger qua `POST /api/admin/search/reindex`.
 - **Benchmark**: `app/benchmark_search.py` tự reindex rồi chạy 15 câu truy vấn tự soạn, tính
   Precision@5/@10 bằng cách đối chiếu tag của kết quả trả về với tag "đúng" gán sẵn cho từng
   câu truy vấn (cách xấp xỉ khách quan cho dataset seed có gắn tag rõ ràng theo chủ đề). Kết
@@ -199,8 +182,8 @@ lỗi memory leak trong React?" 53%), "docker deploy production" (top-1: "Có n�
 cho dự án production không?" 58.4%), "cosine similarity" (top-1 75.4%).
 
 ## Việc tiếp theo (theo đúng kế hoạch)
-- Tuần 3: tích hợp Frontend (trang list/detail/tạo câu hỏi, thanh tìm kiếm chọn
-  TF-IDF/SBERT hiển thị % tương đồng), test toàn luồng, vẽ biểu đồ benchmark, viết báo cáo,
-  làm slide + quay demo dự phòng.
+- Tuần 3: tích hợp Frontend (trang list/detail/tạo câu hỏi, thanh tìm kiếm TF-IDF hiển thị
+  % tương đồng), test toàn luồng, vẽ biểu đồ benchmark, viết báo cáo, làm slide + quay demo
+  dự phòng.
 - Optional nếu dư thời gian: badge, thông báo real-time, quên mật khẩu qua email (đã cắt
   giảm theo đúng Phần 6 kế hoạch — "làm 1 mình cần ưu tiên đúng trọng số điểm").

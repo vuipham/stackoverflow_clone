@@ -8,18 +8,36 @@ from app.core.security import get_current_user, require_reputation, check_owner_
 from app.core.privileges import PRIVILEGE
 from app.models.question import QuestionCreateRequest, QuestionUpdateRequest
 from app.services.tag_service import sync_tags_on_create, sync_tags_on_update, sync_tags_on_delete
-from app.services.search import tfidf_service, sbert_service
+from app.services.search import tfidf_service
+
+from app.core.database import questions_col, answers_col, comments_col, votes_col, users_col
 
 router = APIRouter(prefix="/api/questions", tags=["questions"])
 
 
-def serialize_question(q: dict) -> dict:
+async def serialize_question(q: dict, author_cache: Optional[dict] = None) -> dict:
+    author_info = None
+    author_id_str = str(q["authorId"])
+    if author_cache and author_id_str in author_cache:
+        author_info = author_cache[author_id_str]
+    else:
+        user = await users_col.find_one({"_id": q["authorId"]})
+        if user:
+            author_info = {
+                "id": str(user["_id"]),
+                "displayName": user.get("displayName", user.get("username", "User")),
+                "reputation": user.get("reputation", 1),
+            }
+            if author_cache is not None:
+                author_cache[author_id_str] = author_info
+
     return {
         "id": str(q["_id"]),
         "title": q["title"],
         "body": q["body"],
         "tags": q.get("tags", []),
-        "authorId": str(q["authorId"]),
+        "authorId": author_id_str,
+        "author": author_info,
         "viewCount": q.get("viewCount", 0),
         "voteScore": q.get("voteScore", 0),
         "answerCount": q.get("answerCount", 0),
@@ -31,11 +49,52 @@ def serialize_question(q: dict) -> dict:
 
 
 @router.get("")
-async def list_questions(tag: Optional[str] = None, page: int = Query(1, ge=1), limit: int = Query(20, le=100)):
-    filt = {"tags": tag.lower()} if tag else {}
-    cursor = questions_col.find(filt).sort("createdAt", -1).skip((page - 1) * limit).limit(limit)
-    questions = [serialize_question(q) async for q in cursor]
-    return {"questions": questions}
+async def list_questions(
+    tag: Optional[str] = None,
+    sort: str = Query("newest", regex="^(newest|votes|active|unanswered)$"),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, le=100),
+):
+    filt = {}
+    if tag:
+        filt["tags"] = tag.lower()
+
+    if sort == "unanswered":
+        filt["answerCount"] = 0
+        sort_spec = [("createdAt", -1)]
+    elif sort == "votes":
+        sort_spec = [("voteScore", -1), ("createdAt", -1)]
+    elif sort == "active":
+        sort_spec = [("updatedAt", -1), ("createdAt", -1)]
+    else:  # newest
+        sort_spec = [("createdAt", -1)]
+
+    total = await questions_col.count_documents(filt)
+    cursor = (
+        questions_col.find(filt)
+        .sort(sort_spec)
+        .skip((page - 1) * limit)
+        .limit(limit)
+    )
+    docs = [q async for q in cursor]
+    author_ids = list({q["authorId"] for q in docs})
+    authors = {
+        str(u["_id"]): {
+            "id": str(u["_id"]),
+            "displayName": u.get("displayName", u.get("username", "User")),
+            "reputation": u.get("reputation", 1),
+        }
+        async for u in users_col.find({"_id": {"$in": author_ids}})
+    }
+    questions = [await serialize_question(q, author_cache=authors) for q in docs]
+    total_pages = (total + limit - 1) // limit if limit > 0 else 1
+    return {
+        "questions": questions,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "totalPages": total_pages,
+    }
 
 
 @router.get("/{question_id}")
@@ -47,7 +106,7 @@ async def get_question(question_id: str):
         raise HTTPException(status_code=404, detail="Không tìm thấy câu hỏi")
     await questions_col.update_one({"_id": q["_id"]}, {"$inc": {"viewCount": 1}})
     q["viewCount"] = q.get("viewCount", 0) + 1
-    return {"question": serialize_question(q)}
+    return {"question": await serialize_question(q)}
 
 
 @router.post("", status_code=201)
@@ -73,13 +132,12 @@ async def create_question(
     doc["_id"] = result.inserted_id
     await sync_tags_on_create(doc["tags"])
 
-    # Luồng index tự động (Phần 3/Ngày 13): index ngay bằng vocab/model hiện hành, đồng bộ.
-    # Nếu chưa từng reindex_all() (chưa có vocab TF-IDF / model SBERT chưa sẵn sàng), các hàm
-    # này tự bỏ qua an toàn - isIndexed vẫn False cho tới lần reindex thủ công tiếp theo.
-    await tfidf_service.index_single_question(doc["_id"], doc["title"])
-    await sbert_service.index_single_question(doc["_id"], doc["title"])
+    # Luồng index tự động (Phần 3/Ngày 13): index ngay bằng vocab hiện hành, đồng bộ.
+    # Nếu chưa từng reindex_all() (chưa có vocab TF-IDF), hàm này tự bỏ qua an toàn -
+    # isIndexed vẫn False cho tới lần reindex thủ công tiếp theo.
+    await tfidf_service.index_single_question(doc["_id"], doc["title"], doc.get("body", ""))
     updated = await questions_col.find_one({"_id": doc["_id"]})
-    return {"question": serialize_question(updated)}
+    return {"question": await serialize_question(updated)}
 
 
 @router.put("/{question_id}")
@@ -109,12 +167,11 @@ async def update_question(
     await questions_col.update_one({"_id": q["_id"]}, {"$set": update})
     if payload.tags is not None:
         await sync_tags_on_update(q.get("tags", []), update["tags"])
-    if payload.title is not None:
-        # Tiêu đề đổi -> re-index ngay để search luôn phản ánh dữ liệu mới nhất
-        await tfidf_service.index_single_question(q["_id"], payload.title)
-        await sbert_service.index_single_question(q["_id"], payload.title)
     updated = await questions_col.find_one({"_id": q["_id"]})
-    return {"question": serialize_question(updated)}
+    if payload.title is not None or payload.body is not None:
+        # Tiêu đề hoặc nội dung đổi -> re-index ngay
+        await tfidf_service.index_single_question(q["_id"], updated.get("title", ""), updated.get("body", ""))
+    return {"question": await serialize_question(updated)}
 
 
 @router.delete("/{question_id}")
@@ -140,8 +197,7 @@ async def delete_question(question_id: str, current_user: dict = Depends(get_cur
 
     await questions_col.delete_one({"_id": q["_id"]})
 
-    # Dọn vector chỉ mục tương ứng (không để "mồ côi" trong 2 collection vector)
+    # Dọn vector chỉ mục tương ứng (không để "mồ côi" trong collection vector)
     await tfidf_service.remove_question(q["_id"])
-    await sbert_service.remove_question(q["_id"])
 
     return {"message": "Đã xóa câu hỏi"}

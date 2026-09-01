@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { currentUser, authReady } from '$lib/stores/auth';
+	import MergeTagPanel from '$lib/components/MergeTagPanel.svelte';
 	import {
 		adminListUsers,
 		adminBanUser,
@@ -11,6 +12,7 @@
 		listTags,
 		updateTag,
 		deleteTag,
+		mergeTag,
 		ApiError,
 		type AdminUser,
 		type Tag,
@@ -73,10 +75,21 @@
 		tags = tags.filter((x) => x.id !== t.id);
 	}
 
+	async function editTagName(t: Tag) {
+		const newName = prompt(`Tên mới cho tag "${t.name}":`, t.name);
+		if (newName === null || newName.trim() === t.name) return;
+		try {
+			const res = await updateTag(t.id, { name: newName.trim() });
+			tags = tags.map((x) => (x.id === t.id ? res.tag : x));
+		} catch (err) {
+			alert(err instanceof ApiError ? String(err.detail) : 'Đổi tên thất bại');
+		}
+	}
+
 	async function editTagDescription(t: Tag) {
 		const desc = prompt(`Mô tả mới cho tag "${t.name}":`, t.description);
 		if (desc === null) return;
-		const res = await updateTag(t.id, desc);
+		const res = await updateTag(t.id, { description: desc });
 		tags = tags.map((x) => (x.id === t.id ? res.tag : x));
 	}
 
@@ -102,7 +115,7 @@
 	<p>Đang tải...</p>
 {:else}
 	<section>
-		<h2>Module tìm kiếm (TF-IDF / SBERT)</h2>
+		<h2>Module tìm kiếm (TF-IDF)</h2>
 		<p class="hint">
 			Bấm nút này sau mỗi lần seed/thêm nhiều câu hỏi để build lại toàn bộ chỉ mục.
 		</p>
@@ -171,6 +184,10 @@
 
 	<section>
 		<h2>Quản lý tag ({tags.length})</h2>
+		<details class="merge-section">
+			<summary>🔀 Gộp tag trùng lặp</summary>
+			<MergeTagPanel {tags} onMerged={(t) => { tags = tags.filter((x) => x.id !== t.removedId); tags = tags.map((x) => x.id === t.updatedTag.id ? t.updatedTag : x); }} />
+		</details>
 		<table>
 			<thead>
 				<tr><th>Tag</th><th>Mô tả</th><th>Số câu hỏi</th><th></th></tr>
@@ -178,11 +195,12 @@
 			<tbody>
 				{#each tags as t}
 					<tr>
-						<td>{t.name}</td>
+						<td><strong>{t.name}</strong></td>
 						<td>{t.description || '—'}</td>
 						<td>{t.questionCount}</td>
-						<td>
-							<button onclick={() => editTagDescription(t)}>Sửa</button>
+						<td class="action-cell">
+							<button onclick={() => editTagName(t)}>Đổi tên</button>
+							<button onclick={() => editTagDescription(t)}>Sửa mô tả</button>
 							<button class="danger" onclick={() => removeTag(t)}>Xóa</button>
 						</td>
 					</tr>
@@ -268,5 +286,23 @@
 	}
 	button:hover {
 		background: #f2f4f7;
+	}
+	.merge-section {
+		margin-bottom: 0.8rem;
+		border: 1px solid #eaecef;
+		border-radius: 6px;
+		padding: 0.4rem 0.8rem;
+		background: #fafbfc;
+	}
+	.merge-section summary {
+		cursor: pointer;
+		font-size: 0.85rem;
+		color: #5b6673;
+		padding: 0.2rem 0;
+	}
+	.action-cell {
+		display: flex;
+		gap: 0.35rem;
+		flex-wrap: wrap;
 	}
 </style>

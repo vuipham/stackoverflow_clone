@@ -1,0 +1,2441 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+src/
+  lib/
+    api/
+      client.ts
+    assets/
+      favicon.svg
+    components/
+      CommentsSection.svelte
+    stores/
+      auth.ts
+    index.ts
+  routes/
+    admin/
+      +page.svelte
+    ask/
+      +page.svelte
+    login/
+      +page.svelte
+    questions/
+      [id]/
+        +page.svelte
+      +page.svelte
+    register/
+      +page.svelte
+    search/
+      +page.svelte
+    +layout.svelte
+    +page.svelte
+  app.d.ts
+  app.html
+static/
+  robots.txt
+.env.example
+.gitignore
+.npmrc
+package.json
+README.md
+tsconfig.json
+vite.config.ts
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="src/lib/api/client.ts">
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
+export class ApiError extends Error {
+	status: number;
+	detail: unknown;
+	constructor(status: number, detail: unknown) {
+		super(typeof detail === 'string' ? detail : JSON.stringify(detail));
+		this.status = status;
+		this.detail = detail;
+	}
+}
+
+function getToken(): string | null {
+	if (typeof localStorage === 'undefined') return null;
+	return localStorage.getItem('token');
+}
+
+async function request<T>(
+	path: string,
+	options: { method?: string; body?: unknown; auth?: boolean } = {}
+): Promise<T> {
+	const { method = 'GET', body, auth = false } = options;
+	const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+
+	if (auth) {
+		const token = getToken();
+		if (token) headers['Authorization'] = `Bearer ${token}`;
+	}
+
+	const res = await fetch(`${API_BASE_URL}${path}`, {
+		method,
+		headers,
+		body: body ? JSON.stringify(body) : undefined
+	});
+
+	const data = await res.json().catch(() => null);
+
+	if (!res.ok) {
+		throw new ApiError(res.status, data?.detail ?? data ?? 'Lỗi không xác định');
+	}
+	return data as T;
+}
+
+// ---- Auth ----
+export interface PublicUser {
+	id: string;
+	username: string;
+	email: string;
+	displayName: string;
+	reputation: number;
+	isAdmin: boolean;
+}
+
+export function register(payload: {
+	username: string;
+	email: string;
+	password: string;
+	displayName?: string;
+}) {
+	return request<{ token: string; user: PublicUser }>('/api/auth/register', {
+		method: 'POST',
+		body: payload
+	});
+}
+
+export function login(payload: { username: string; password: string }) {
+	return request<{ token: string; user: PublicUser }>('/api/auth/login', {
+		method: 'POST',
+		body: payload
+	});
+}
+
+export function fetchMe() {
+	return request<PublicUser>('/api/auth/me', { auth: true });
+}
+
+// ---- Questions ----
+export interface Question {
+	id: string;
+	title: string;
+	body: string;
+	tags: string[];
+	authorId: string;
+	viewCount: number;
+	voteScore: number;
+	answerCount: number;
+	acceptedAnswerId: string | null;
+	isIndexed: boolean;
+	createdAt: string;
+	updatedAt: string;
+}
+
+export function listQuestions(tag?: string) {
+	const qs = tag ? `?tag=${encodeURIComponent(tag)}` : '';
+	return request<{ questions: Question[] }>(`/api/questions${qs}`);
+}
+
+export function getQuestion(id: string) {
+	return request<{ question: Question }>(`/api/questions/${id}`);
+}
+
+export function createQuestion(payload: { title: string; body: string; tags: string[] }) {
+	return request<{ question: Question }>('/api/questions', {
+		method: 'POST',
+		body: payload,
+		auth: true
+	});
+}
+
+// ---- Votes ----
+export function castVote(payload: {
+	targetType: 'question' | 'answer';
+	targetId: string;
+	value: 1 | -1;
+}) {
+	return request<{ message: string; newVoteScore: number }>('/api/votes', {
+		method: 'POST',
+		body: payload,
+		auth: true
+	});
+}
+
+// ---- Answers ----
+export interface Answer {
+	id: string;
+	questionId: string;
+	authorId: string;
+	body: string;
+	voteScore: number;
+	isAccepted: boolean;
+	createdAt: string;
+}
+
+export function listAnswers(questionId: string) {
+	return request<{ answers: Answer[] }>(`/api/questions/${questionId}/answers`);
+}
+
+export function createAnswer(questionId: string, body: string) {
+	return request<{ answer: Answer }>(`/api/questions/${questionId}/answers`, {
+		method: 'POST',
+		body: { body },
+		auth: true
+	});
+}
+
+export function acceptAnswer(answerId: string) {
+	return request<{ answer: Answer }>(`/api/answers/${answerId}/accept`, {
+		method: 'POST',
+		auth: true
+	});
+}
+
+export function deleteAnswer(answerId: string) {
+	return request<{ message: string }>(`/api/answers/${answerId}`, {
+		method: 'DELETE',
+		auth: true
+	});
+}
+
+// ---- Comments ----
+export interface Comment {
+	id: string;
+	targetType: 'question' | 'answer';
+	targetId: string;
+	authorId: string;
+	content: string;
+	createdAt: string;
+}
+
+export function listComments(targetType: 'question' | 'answer', targetId: string) {
+	return request<{ comments: Comment[] }>(
+		`/api/comments?targetType=${targetType}&targetId=${targetId}`
+	);
+}
+
+export function createComment(targetType: 'question' | 'answer', targetId: string, content: string) {
+	return request<{ comment: Comment }>('/api/comments', {
+		method: 'POST',
+		body: { targetType, targetId, content },
+		auth: true
+	});
+}
+
+export function deleteComment(commentId: string) {
+	return request<{ message: string }>(`/api/comments/${commentId}`, {
+		method: 'DELETE',
+		auth: true
+	});
+}
+
+// ---- Tags ----
+export interface Tag {
+	id: string;
+	name: string;
+	description: string;
+	questionCount: number;
+}
+
+export function listTags() {
+	return request<{ tags: Tag[] }>('/api/tags');
+}
+
+export function updateTag(tagId: string, description: string) {
+	return request<{ tag: Tag }>(`/api/tags/${tagId}`, {
+		method: 'PUT',
+		body: { description },
+		auth: true
+	});
+}
+
+export function deleteTag(tagId: string) {
+	return request<{ message: string }>(`/api/tags/${tagId}`, {
+		method: 'DELETE',
+		auth: true
+	});
+}
+
+// ---- Search (Chức năng B) ----
+export interface SearchResultItem {
+	questionId: string;
+	title: string;
+	tags: string[];
+	voteScore: number;
+	answerCount: number;
+	similarityScore: number;
+	similarityPercent: number;
+}
+
+export interface SearchResponse {
+	method: 'tfidf';
+	query: string;
+	elapsedMs: number;
+	results: SearchResultItem[];
+}
+
+export function searchTfidf(q: string, topK = 10) {
+	return request<SearchResponse>(
+		`/api/search/tfidf?q=${encodeURIComponent(q)}&top_k=${topK}`
+	);
+}
+
+// ---- Admin ----
+export interface AdminUser {
+	id: string;
+	username: string;
+	email: string;
+	displayName: string;
+	reputation: number;
+	isAdmin: boolean;
+	isBanned: boolean;
+}
+
+export function adminListUsers(q?: string) {
+	const qs = q ? `?q=${encodeURIComponent(q)}` : '';
+	return request<{ users: AdminUser[] }>(`/api/admin/users${qs}`, { auth: true });
+}
+
+export function adminBanUser(userId: string, isBanned: boolean) {
+	return request<{ user: AdminUser }>(`/api/admin/users/${userId}/ban`, {
+		method: 'PATCH',
+		body: { isBanned },
+		auth: true
+	});
+}
+
+export function adminAdjustReputation(userId: string, delta: number, reason = 'admin_adjust') {
+	return request<{ user: AdminUser }>(`/api/admin/users/${userId}/reputation`, {
+		method: 'PATCH',
+		body: { delta, reason },
+		auth: true
+	});
+}
+
+export function adminTriggerReindex() {
+	return request<{ tfidf: unknown }>('/api/admin/search/reindex', {
+		method: 'POST',
+		auth: true
+	});
+}
+
+export interface BenchmarkLogEntry {
+	method: string;
+	query: string;
+	elapsedMs: number;
+	resultCount: number;
+}
+
+export function adminGetBenchmarkLog(limit = 50) {
+	return request<{ logs: BenchmarkLogEntry[] }>(
+		`/api/admin/search/benchmark-log?limit=${limit}`,
+		{ auth: true }
+	);
+}
+</file>
+
+<file path="src/lib/assets/favicon.svg">
+<svg xmlns="http://www.w3.org/2000/svg" width="107" height="128" viewBox="0 0 107 128"><title>svelte-logo</title><path d="M94.157 22.819c-10.4-14.885-30.94-19.297-45.792-9.835L22.282 29.608A29.92 29.92 0 0 0 8.764 49.65a31.5 31.5 0 0 0 3.108 20.231 30 30 0 0 0-4.477 11.183 31.9 31.9 0 0 0 5.448 24.116c10.402 14.887 30.942 19.297 45.791 9.835l26.083-16.624A29.92 29.92 0 0 0 98.235 78.35a31.53 31.53 0 0 0-3.105-20.232 30 30 0 0 0 4.474-11.182 31.88 31.88 0 0 0-5.447-24.116" style="fill:#ff3e00"/><path d="M45.817 106.582a20.72 20.72 0 0 1-22.237-8.243 19.17 19.17 0 0 1-3.277-14.503 18 18 0 0 1 .624-2.435l.49-1.498 1.337.981a33.6 33.6 0 0 0 10.203 5.098l.97.294-.09.968a5.85 5.85 0 0 0 1.052 3.878 6.24 6.24 0 0 0 6.695 2.485 5.8 5.8 0 0 0 1.603-.704L69.27 76.28a5.43 5.43 0 0 0 2.45-3.631 5.8 5.8 0 0 0-.987-4.371 6.24 6.24 0 0 0-6.698-2.487 5.7 5.7 0 0 0-1.6.704l-9.953 6.345a19 19 0 0 1-5.296 2.326 20.72 20.72 0 0 1-22.237-8.243 19.17 19.17 0 0 1-3.277-14.502 17.99 17.99 0 0 1 8.13-12.052l26.081-16.623a19 19 0 0 1 5.3-2.329 20.72 20.72 0 0 1 22.237 8.243 19.17 19.17 0 0 1 3.277 14.503 18 18 0 0 1-.624 2.435l-.49 1.498-1.337-.98a33.6 33.6 0 0 0-10.203-5.1l-.97-.294.09-.968a5.86 5.86 0 0 0-1.052-3.878 6.24 6.24 0 0 0-6.696-2.485 5.8 5.8 0 0 0-1.602.704L37.73 51.72a5.42 5.42 0 0 0-2.449 3.63 5.79 5.79 0 0 0 .986 4.372 6.24 6.24 0 0 0 6.698 2.486 5.8 5.8 0 0 0 1.602-.704l9.952-6.342a19 19 0 0 1 5.295-2.328 20.72 20.72 0 0 1 22.237 8.242 19.17 19.17 0 0 1 3.277 14.503 18 18 0 0 1-8.13 12.053l-26.081 16.622a19 19 0 0 1-5.3 2.328" style="fill:#fff"/></svg>
+</file>
+
+<file path="src/lib/components/CommentsSection.svelte">
+<script lang="ts">
+	import { onMount } from 'svelte';
+	import {
+		listComments,
+		createComment,
+		deleteComment,
+		ApiError,
+		type Comment
+	} from '$lib/api/client';
+	import { currentUser, PRIVILEGE } from '$lib/stores/auth';
+
+	let { targetType, targetId, ownerId }: {
+		targetType: 'question' | 'answer';
+		targetId: string;
+		ownerId: string;
+	} = $props();
+
+	let comments = $state<Comment[]>([]);
+	let newContent = $state('');
+	let loading = $state(true);
+	let posting = $state(false);
+	let errorMsg = $state('');
+	let expanded = $state(false);
+
+	async function load() {
+		loading = true;
+		try {
+			const res = await listComments(targetType, targetId);
+			comments = res.comments;
+		} catch {
+			// im lặng - bình luận không phải nội dung bắt buộc phải tải thành công
+		} finally {
+			loading = false;
+		}
+	}
+
+	onMount(load);
+
+	// Dưới 50 rep chỉ bình luận được bài của chính mình - hiện tooltip đúng lý do trước khi user bấm gửi
+	let isOwnPost = $derived($currentUser?.id === ownerId);
+	let canComment = $derived(
+		!!$currentUser && (isOwnPost || ($currentUser.reputation ?? 0) >= PRIVILEGE.COMMENT_ON_OTHERS)
+	);
+
+	async function submit(e: Event) {
+		e.preventDefault();
+		if (!newContent.trim()) return;
+		posting = true;
+		errorMsg = '';
+		try {
+			const res = await createComment(targetType, targetId, newContent.trim());
+			comments = [...comments, res.comment];
+			newContent = '';
+		} catch (err) {
+			if (err instanceof ApiError) {
+				const detail = err.detail as { error?: string } | string;
+				errorMsg = typeof detail === 'string' ? detail : detail.error || 'Bình luận thất bại';
+			} else {
+				errorMsg = 'Bình luận thất bại';
+			}
+		} finally {
+			posting = false;
+		}
+	}
+
+	async function remove(id: string) {
+		try {
+			await deleteComment(id);
+			comments = comments.filter((c) => c.id !== id);
+		} catch {
+			// bỏ qua - nút xóa chỉ hiện cho người có quyền nên hiếm khi lỗi
+		}
+	}
+</script>
+
+<div class="comments-block">
+	{#if !expanded}
+		<button class="toggle-link" onclick={() => (expanded = true)}>
+			💬 {loading ? 'Bình luận' : `${comments.length} bình luận`}
+		</button>
+	{:else}
+		<div class="comments-list">
+			{#each comments as c}
+				<div class="comment-row">
+					<span class="comment-content">{c.content}</span>
+					{#if $currentUser && ($currentUser.id === c.authorId || $currentUser.isAdmin)}
+						<button class="delete-link" onclick={() => remove(c.id)}>xóa</button>
+					{/if}
+				</div>
+			{/each}
+			{#if comments.length === 0}
+				<p class="no-comments">Chưa có bình luận nào.</p>
+			{/if}
+		</div>
+
+		{#if $currentUser}
+			<form class="comment-form" onsubmit={submit}>
+				<input
+					bind:value={newContent}
+					maxlength="1000"
+					placeholder={canComment
+						? 'Thêm bình luận...'
+						: `Cần >= ${PRIVILEGE.COMMENT_ON_OTHERS} reputation để bình luận bài người khác`}
+					disabled={!canComment}
+				/>
+				<button type="submit" disabled={posting || !canComment || !newContent.trim()}>Gửi</button>
+			</form>
+			{#if errorMsg}<p class="error">{errorMsg}</p>{/if}
+		{/if}
+	{/if}
+</div>
+
+<style>
+	.comments-block {
+		margin-top: 0.6rem;
+	}
+	.toggle-link {
+		background: none;
+		border: none;
+		color: #6a7685;
+		font-size: 0.82rem;
+		cursor: pointer;
+		padding: 0;
+	}
+	.toggle-link:hover {
+		color: #0074cc;
+	}
+	.comments-list {
+		border-top: 1px solid #f0f1f3;
+		padding-top: 0.5rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+	}
+	.comment-row {
+		font-size: 0.85rem;
+		color: #3b4759;
+		display: flex;
+		justify-content: space-between;
+		gap: 0.5rem;
+	}
+	.comment-content {
+		flex: 1;
+	}
+	.delete-link {
+		background: none;
+		border: none;
+		color: #d63384;
+		font-size: 0.75rem;
+		cursor: pointer;
+		padding: 0;
+	}
+	.no-comments {
+		font-size: 0.82rem;
+		color: #b0b8c1;
+		margin: 0;
+	}
+	.comment-form {
+		display: flex;
+		gap: 0.5rem;
+		margin-top: 0.6rem;
+	}
+	.comment-form input {
+		flex: 1;
+		padding: 0.4rem 0.6rem;
+		border: 1px solid #e0e3e8;
+		border-radius: 5px;
+		font-size: 0.85rem;
+	}
+	.comment-form button {
+		padding: 0.4rem 0.9rem;
+		border: none;
+		border-radius: 5px;
+		background: #f0f5fb;
+		color: #0074cc;
+		font-size: 0.82rem;
+		cursor: pointer;
+	}
+	.comment-form button:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+	.error {
+		font-size: 0.78rem;
+		color: #d63384;
+		margin: 0.3rem 0 0;
+	}
+</style>
+</file>
+
+<file path="src/lib/stores/auth.ts">
+import { writable } from 'svelte/store';
+import type { PublicUser } from '$lib/api/client';
+import { fetchMe } from '$lib/api/client';
+
+// Ngưỡng đặc quyền — khớp với backend (app/core/privileges.py) để UI có thể
+// disable/hiện tooltip đúng ngay trên client, backend vẫn là nơi enforce thật.
+export const PRIVILEGE = {
+	ASK_ANSWER: 1,
+	UPVOTE: 15,
+	COMMENT_ON_OTHERS: 50,
+	DOWNVOTE: 125,
+	EDIT_OTHERS_POST: 500,
+	DELETE_OTHERS_QUESTION: 2000
+};
+
+export const currentUser = writable<PublicUser | null>(null);
+export const authReady = writable(false);
+
+export function setSession(token: string, user: PublicUser) {
+	localStorage.setItem('token', token);
+	currentUser.set(user);
+}
+
+export function clearSession() {
+	localStorage.removeItem('token');
+	currentUser.set(null);
+}
+
+/** Gọi lúc app khởi động để khôi phục phiên đăng nhập từ token đã lưu. */
+export async function restoreSession() {
+	const token = localStorage.getItem('token');
+	if (!token) {
+		authReady.set(true);
+		return;
+	}
+	try {
+		const user = await fetchMe();
+		currentUser.set(user);
+	} catch {
+		localStorage.removeItem('token');
+		currentUser.set(null);
+	} finally {
+		authReady.set(true);
+	}
+}
+</file>
+
+<file path="src/lib/index.ts">
+// place files you want to import through the `$lib` alias in this folder.
+</file>
+
+<file path="src/routes/admin/+page.svelte">
+<script lang="ts">
+	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { currentUser, authReady } from '$lib/stores/auth';
+	import {
+		adminListUsers,
+		adminBanUser,
+		adminAdjustReputation,
+		adminTriggerReindex,
+		adminGetBenchmarkLog,
+		listTags,
+		updateTag,
+		deleteTag,
+		ApiError,
+		type AdminUser,
+		type Tag,
+		type BenchmarkLogEntry
+	} from '$lib/api/client';
+
+	let users = $state<AdminUser[]>([]);
+	let tags = $state<Tag[]>([]);
+	let logs = $state<BenchmarkLogEntry[]>([]);
+	let loading = $state(true);
+	let reindexResult = $state<string>('');
+	let reindexing = $state(false);
+	let repDelta = $state<Record<string, number>>({});
+
+	onMount(() => {
+		const unsub = authReady.subscribe((ready) => {
+			if (ready) {
+				if (!$currentUser) goto('/login');
+				else if (!$currentUser.isAdmin) goto('/questions');
+				else loadAll();
+			}
+		});
+		return unsub;
+	});
+
+	async function loadAll() {
+		loading = true;
+		try {
+			const [uRes, tRes, lRes] = await Promise.all([
+				adminListUsers(),
+				listTags(),
+				adminGetBenchmarkLog(20)
+			]);
+			users = uRes.users;
+			tags = tRes.tags;
+			logs = lRes.logs;
+		} catch {
+			// backend chưa chạy - trang vẫn hiện, chỉ rỗng dữ liệu
+		} finally {
+			loading = false;
+		}
+	}
+
+	async function toggleBan(u: AdminUser) {
+		const res = await adminBanUser(u.id, !u.isBanned);
+		users = users.map((x) => (x.id === u.id ? res.user : x));
+	}
+
+	async function applyDelta(u: AdminUser) {
+		const delta = repDelta[u.id];
+		if (!delta) return;
+		const res = await adminAdjustReputation(u.id, delta);
+		users = users.map((x) => (x.id === u.id ? res.user : x));
+		repDelta[u.id] = 0;
+	}
+
+	async function removeTag(t: Tag) {
+		if (!confirm(`Xóa tag "${t.name}"? (không tự xóa tag khỏi câu hỏi đã gắn)`)) return;
+		await deleteTag(t.id);
+		tags = tags.filter((x) => x.id !== t.id);
+	}
+
+	async function editTagDescription(t: Tag) {
+		const desc = prompt(`Mô tả mới cho tag "${t.name}":`, t.description);
+		if (desc === null) return;
+		const res = await updateTag(t.id, desc);
+		tags = tags.map((x) => (x.id === t.id ? res.tag : x));
+	}
+
+	async function runReindex() {
+		reindexing = true;
+		reindexResult = '';
+		try {
+			const res = await adminTriggerReindex();
+			reindexResult = JSON.stringify(res, null, 2);
+			const lRes = await adminGetBenchmarkLog(20);
+			logs = lRes.logs;
+		} catch (err) {
+			reindexResult = err instanceof ApiError ? `Lỗi: ${String(err.detail)}` : 'Reindex thất bại';
+		} finally {
+			reindexing = false;
+		}
+	}
+</script>
+
+<h1>Trang quản trị</h1>
+
+{#if loading}
+	<p>Đang tải...</p>
+{:else}
+	<section>
+		<h2>Module tìm kiếm (TF-IDF)</h2>
+		<p class="hint">
+			Bấm nút này sau mỗi lần seed/thêm nhiều câu hỏi để build lại toàn bộ chỉ mục.
+		</p>
+		<button class="primary" onclick={runReindex} disabled={reindexing}>
+			{reindexing ? 'Đang reindex...' : 'Reindex toàn bộ'}
+		</button>
+		{#if reindexResult}
+			<pre class="result-box">{reindexResult}</pre>
+		{/if}
+
+		<h3>Log thời gian phản hồi gần nhất</h3>
+		{#if logs.length === 0}
+			<p class="hint">Chưa có lượt search nào được ghi log.</p>
+		{:else}
+			<table>
+				<thead>
+					<tr><th>Phương pháp</th><th>Truy vấn</th><th>Thời gian (ms)</th><th>Số kết quả</th></tr>
+				</thead>
+				<tbody>
+					{#each logs as l}
+						<tr>
+							<td>{l.method}</td>
+							<td>{l.query}</td>
+							<td>{l.elapsedMs}</td>
+							<td>{l.resultCount}</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		{/if}
+	</section>
+
+	<section>
+		<h2>Quản lý user ({users.length})</h2>
+		<table>
+			<thead>
+				<tr>
+					<th>Username</th><th>Reputation</th><th>Trạng thái</th><th>Điều chỉnh rep</th><th></th>
+				</tr>
+			</thead>
+			<tbody>
+				{#each users as u}
+					<tr>
+						<td>{u.displayName} (@{u.username}){u.isAdmin ? ' 👑' : ''}</td>
+						<td>{u.reputation}</td>
+						<td>{u.isBanned ? '🚫 Đã khóa' : '✅ Bình thường'}</td>
+						<td class="rep-cell">
+							<input
+								type="number"
+								placeholder="+/- điểm"
+								value={repDelta[u.id] ?? ''}
+								oninput={(e) => (repDelta[u.id] = Number((e.target as HTMLInputElement).value))}
+							/>
+							<button onclick={() => applyDelta(u)}>Áp dụng</button>
+						</td>
+						<td>
+							<button class:danger={!u.isBanned} onclick={() => toggleBan(u)}>
+								{u.isBanned ? 'Mở khóa' : 'Khóa'}
+							</button>
+						</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	</section>
+
+	<section>
+		<h2>Quản lý tag ({tags.length})</h2>
+		<table>
+			<thead>
+				<tr><th>Tag</th><th>Mô tả</th><th>Số câu hỏi</th><th></th></tr>
+			</thead>
+			<tbody>
+				{#each tags as t}
+					<tr>
+						<td>{t.name}</td>
+						<td>{t.description || '—'}</td>
+						<td>{t.questionCount}</td>
+						<td>
+							<button onclick={() => editTagDescription(t)}>Sửa</button>
+							<button class="danger" onclick={() => removeTag(t)}>Xóa</button>
+						</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	</section>
+{/if}
+
+<style>
+	section {
+		margin-bottom: 2.5rem;
+	}
+	h2 {
+		font-size: 1.15rem;
+		border-bottom: 1px solid #eaecef;
+		padding-bottom: 0.4rem;
+	}
+	h3 {
+		font-size: 0.95rem;
+		margin-top: 1.2rem;
+	}
+	.hint {
+		font-size: 0.85rem;
+		color: #8a94a3;
+	}
+	.primary {
+		padding: 0.5rem 1.1rem;
+		border: none;
+		border-radius: 6px;
+		background: #0074cc;
+		color: white;
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.primary:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+	.result-box {
+		background: #f6f8fa;
+		border: 1px solid #eaecef;
+		border-radius: 6px;
+		padding: 0.8rem;
+		font-size: 0.78rem;
+		overflow-x: auto;
+		margin-top: 0.8rem;
+	}
+	table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.85rem;
+		margin-top: 0.6rem;
+	}
+	th,
+	td {
+		text-align: left;
+		padding: 0.5rem 0.6rem;
+		border-bottom: 1px solid #f0f1f3;
+	}
+	.rep-cell {
+		display: flex;
+		gap: 0.4rem;
+		align-items: center;
+	}
+	.rep-cell input {
+		width: 80px;
+		padding: 0.25rem 0.4rem;
+		border: 1px solid #d0d5dd;
+		border-radius: 4px;
+	}
+	button {
+		padding: 0.3rem 0.7rem;
+		border: 1px solid #d0d5dd;
+		border-radius: 5px;
+		background: white;
+		cursor: pointer;
+		font-size: 0.8rem;
+	}
+	button.danger {
+		border-color: #f3c6d8;
+		color: #d63384;
+	}
+	button:hover {
+		background: #f2f4f7;
+	}
+</style>
+</file>
+
+<file path="src/routes/ask/+page.svelte">
+<script lang="ts">
+	import { onMount } from 'svelte';
+	import { createQuestion, ApiError } from '$lib/api/client';
+	import { currentUser, authReady } from '$lib/stores/auth';
+	import { goto } from '$app/navigation';
+
+	let title = $state('');
+	let body = $state('');
+	let tagsInput = $state('');
+	let error = $state('');
+	let loading = $state(false);
+
+	onMount(() => {
+		const unsub = authReady.subscribe((ready) => {
+			if (ready && !$currentUser) goto('/login');
+		});
+		return unsub;
+	});
+
+	async function handleSubmit(e: Event) {
+		e.preventDefault();
+		error = '';
+		loading = true;
+		try {
+			const tags = tagsInput
+				.split(',')
+				.map((t) => t.trim().toLowerCase())
+				.filter(Boolean);
+			const { question } = await createQuestion({ title, body, tags });
+			goto(`/questions/${question.id}`);
+		} catch (err) {
+			if (err instanceof ApiError) {
+				const detail = err.detail as { error?: string } | string;
+				error = typeof detail === 'string' ? detail : detail.error || 'Tạo câu hỏi thất bại';
+			} else {
+				error = 'Tạo câu hỏi thất bại';
+			}
+		} finally {
+			loading = false;
+		}
+	}
+</script>
+
+<h1>Đặt câu hỏi mới</h1>
+
+<form onsubmit={handleSubmit}>
+	<label>
+		Tiêu đề
+		<input bind:value={title} required minlength="5" placeholder="Câu hỏi của bạn là gì?" />
+	</label>
+	<label>
+		Nội dung
+		<textarea bind:value={body} required rows="6" placeholder="Mô tả chi tiết..."></textarea>
+	</label>
+	<label>
+		Tags (cách nhau bằng dấu phẩy)
+		<input bind:value={tagsInput} placeholder="nlp, search, mongodb" />
+	</label>
+
+	{#if error}<p class="error">{error}</p>{/if}
+
+	<button type="submit" disabled={loading}>{loading ? 'Đang đăng...' : 'Đăng câu hỏi'}</button>
+</form>
+
+<style>
+	form {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+		max-width: 600px;
+	}
+	label {
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+		font-size: 0.9rem;
+		color: #3b4759;
+	}
+	input,
+	textarea {
+		padding: 0.6rem 0.7rem;
+		border: 1px solid #d0d5dd;
+		border-radius: 6px;
+		font-size: 0.95rem;
+		font-family: inherit;
+	}
+	button {
+		align-self: flex-start;
+		padding: 0.6rem 1.4rem;
+		border: none;
+		border-radius: 6px;
+		background: #0074cc;
+		color: white;
+		font-weight: 600;
+		cursor: pointer;
+	}
+	button:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+	.error {
+		color: #d63384;
+		font-size: 0.85rem;
+	}
+</style>
+</file>
+
+<file path="src/routes/login/+page.svelte">
+<script lang="ts">
+	import { login, ApiError } from '$lib/api/client';
+	import { setSession } from '$lib/stores/auth';
+	import { goto } from '$app/navigation';
+
+	let username = $state('');
+	let password = $state('');
+	let error = $state('');
+	let loading = $state(false);
+
+	const TEST_ACCOUNTS = [
+		{ username: 'newbie', reputation: 1 },
+		{ username: 'voter', reputation: 20 },
+		{ username: 'commenter', reputation: 60 },
+		{ username: 'critic', reputation: 130 },
+		{ username: 'editor', reputation: 600 },
+		{ username: 'veteran', reputation: 2200 },
+		{ username: 'admin', reputation: 1, tag: 'Admin' }
+	];
+
+	async function handleSubmit(e: Event) {
+		e.preventDefault();
+		error = '';
+		loading = true;
+		try {
+			const { token, user } = await login({ username, password });
+			setSession(token, user);
+			goto('/questions');
+		} catch (err) {
+			error = err instanceof ApiError ? String(err.detail) : 'Đăng nhập thất bại';
+		} finally {
+			loading = false;
+		}
+	}
+
+	function fillTestAccount(u: string) {
+		username = u;
+		password = 'Test@123';
+	}
+</script>
+
+<h1>Đăng nhập</h1>
+
+<form onsubmit={handleSubmit}>
+	<label>
+		Username
+		<input bind:value={username} required />
+	</label>
+	<label>
+		Mật khẩu
+		<input type="password" bind:value={password} required />
+	</label>
+
+	{#if error}<p class="error">{error}</p>{/if}
+
+	<button type="submit" disabled={loading}>{loading ? 'Đang xử lý...' : 'Đăng nhập'}</button>
+</form>
+
+<p class="switch">Chưa có tài khoản? <a href="/register">Đăng ký</a></p>
+
+<div class="test-accounts">
+	<p class="hint">
+		Tài khoản test có sẵn sau khi chạy <code>python -m app.seed</code>
+		(mật khẩu chung: <code>Test@123</code>) — bấm để điền nhanh:
+	</p>
+	<div class="chips">
+		{#each TEST_ACCOUNTS as acc}
+			<button type="button" class="chip" onclick={() => fillTestAccount(acc.username)}>
+				{acc.username} · {acc.reputation} rep{acc.tag ? ` · ${acc.tag}` : ''}
+			</button>
+		{/each}
+	</div>
+</div>
+
+<style>
+	form {
+		display: flex;
+		flex-direction: column;
+		gap: 0.9rem;
+		max-width: 380px;
+	}
+	label {
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+		font-size: 0.9rem;
+		color: #3b4759;
+	}
+	input {
+		padding: 0.55rem 0.7rem;
+		border: 1px solid #d0d5dd;
+		border-radius: 6px;
+		font-size: 0.95rem;
+	}
+	button[type='submit'] {
+		padding: 0.65rem;
+		border: none;
+		border-radius: 6px;
+		background: #0074cc;
+		color: white;
+		font-weight: 600;
+		cursor: pointer;
+	}
+	button:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+	.error {
+		color: #d63384;
+		font-size: 0.85rem;
+	}
+	.switch {
+		margin-top: 1rem;
+		font-size: 0.9rem;
+	}
+	.test-accounts {
+		margin-top: 2rem;
+		padding-top: 1.5rem;
+		border-top: 1px dashed #d0d5dd;
+		max-width: 500px;
+	}
+	.hint {
+		font-size: 0.82rem;
+		color: #8a94a3;
+	}
+	.chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+	.chip {
+		font-size: 0.8rem;
+		background: #f0f5fb;
+		border: 1px solid #d6e4f5;
+		border-radius: 999px;
+		padding: 0.3rem 0.8rem;
+		cursor: pointer;
+	}
+	.chip:hover {
+		background: #e1edfa;
+	}
+</style>
+</file>
+
+<file path="src/routes/questions/[id]/+page.svelte">
+<script lang="ts">
+	import { page } from '$app/state';
+	import { onMount } from 'svelte';
+	import {
+		getQuestion,
+		castVote,
+		listAnswers,
+		createAnswer,
+		acceptAnswer,
+		ApiError,
+		type Question,
+		type Answer
+	} from '$lib/api/client';
+	import { currentUser, PRIVILEGE } from '$lib/stores/auth';
+	import CommentsSection from '$lib/components/CommentsSection.svelte';
+
+	let question = $state<Question | null>(null);
+	let answers = $state<Answer[]>([]);
+	let loading = $state(true);
+	let errorMsg = $state('');
+	let voteMsg = $state('');
+
+	let newAnswerBody = $state('');
+	let postingAnswer = $state(false);
+	let answerError = $state('');
+
+	async function load() {
+		loading = true;
+		const id = page.params.id;
+		if (!id) {
+			errorMsg = 'Thiếu ID câu hỏi';
+			loading = false;
+			return;
+		}
+		try {
+			const [qRes, aRes] = await Promise.all([getQuestion(id), listAnswers(id)]);
+			question = qRes.question;
+			answers = aRes.answers;
+		} catch {
+			errorMsg = 'Không tìm thấy câu hỏi hoặc backend chưa chạy.';
+		} finally {
+			loading = false;
+		}
+	}
+
+	onMount(load);
+
+	async function vote(targetType: 'question' | 'answer', targetId: string, value: 1 | -1) {
+		voteMsg = '';
+		if (!$currentUser) {
+			voteMsg = 'Cần đăng nhập để vote.';
+			return;
+		}
+		try {
+			const res = await castVote({ targetType, targetId, value });
+			if (targetType === 'question' && question) {
+				question.voteScore = res.newVoteScore;
+			} else {
+				const a = answers.find((x) => x.id === targetId);
+				if (a) a.voteScore = res.newVoteScore;
+			}
+		} catch (err) {
+			if (err instanceof ApiError) {
+				const detail = err.detail as { error?: string } | string;
+				voteMsg = typeof detail === 'string' ? detail : detail.error || 'Vote thất bại';
+			} else {
+				voteMsg = 'Vote thất bại';
+			}
+		}
+	}
+
+	async function submitAnswer(e: Event) {
+		e.preventDefault();
+		if (!question || !newAnswerBody.trim()) return;
+		postingAnswer = true;
+		answerError = '';
+		try {
+			const res = await createAnswer(question.id, newAnswerBody.trim());
+			answers = [...answers, res.answer];
+			question.answerCount += 1;
+			newAnswerBody = '';
+		} catch (err) {
+			if (err instanceof ApiError) {
+				const detail = err.detail as { error?: string } | string;
+				answerError = typeof detail === 'string' ? detail : detail.error || 'Đăng câu trả lời thất bại';
+			} else {
+				answerError = 'Đăng câu trả lời thất bại';
+			}
+		} finally {
+			postingAnswer = false;
+		}
+	}
+
+	async function handleAccept(answerId: string) {
+		try {
+			await acceptAnswer(answerId);
+			answers = answers.map((a) => ({ ...a, isAccepted: a.id === answerId }));
+			if (question) question.acceptedAnswerId = answerId;
+		} catch (err) {
+			if (err instanceof ApiError) {
+				const detail = err.detail as { error?: string } | string;
+				voteMsg = typeof detail === 'string' ? detail : detail.error || 'Không thể chấp nhận câu trả lời';
+			}
+		}
+	}
+
+	let canUpvote = $derived(($currentUser?.reputation ?? 0) >= PRIVILEGE.UPVOTE);
+	let canDownvote = $derived(($currentUser?.reputation ?? 0) >= PRIVILEGE.DOWNVOTE);
+	let isQuestionOwner = $derived(!!question && $currentUser?.id === question.authorId);
+
+	// Câu trả lời được accept lên đầu, còn lại xếp theo voteScore giảm dần
+	let sortedAnswers = $derived(
+		[...answers].sort((a, b) => Number(b.isAccepted) - Number(a.isAccepted) || b.voteScore - a.voteScore)
+	);
+</script>
+
+{#if loading}
+	<p>Đang tải...</p>
+{:else if errorMsg}
+	<p class="error">{errorMsg}</p>
+{:else if question}
+	<h1>{question.title}</h1>
+	<div class="tags">
+		{#each question.tags as tag}
+			<a class="tag" href={`/questions?tag=${encodeURIComponent(tag)}`}>{tag}</a>
+		{/each}
+	</div>
+
+	<div class="body-row">
+		<div class="vote-col">
+			<button
+				class="vote-btn"
+				disabled={!canUpvote}
+				title={canUpvote ? 'Upvote' : `Cần tối thiểu ${PRIVILEGE.UPVOTE} điểm reputation để upvote`}
+				onclick={() => vote('question', question!.id, 1)}
+			>
+				▲
+			</button>
+			<span class="score">{question.voteScore}</span>
+			<button
+				class="vote-btn"
+				disabled={!canDownvote}
+				title={canDownvote
+					? 'Downvote'
+					: `Cần tối thiểu ${PRIVILEGE.DOWNVOTE} điểm reputation để downvote`}
+				onclick={() => vote('question', question!.id, -1)}
+			>
+				▼
+			</button>
+		</div>
+		<div class="body-content">
+			<p>{question.body}</p>
+			<CommentsSection targetType="question" targetId={question.id} ownerId={question.authorId} />
+		</div>
+	</div>
+
+	{#if voteMsg}<p class="vote-msg">{voteMsg}</p>{/if}
+
+	<div class="meta-box">
+		<span>{question.viewCount} lượt xem</span>
+		<span>{question.answerCount} câu trả lời</span>
+		<span>Đăng lúc {new Date(question.createdAt).toLocaleString('vi-VN')}</span>
+		<span class:indexed={question.isIndexed} class="index-status">
+			{question.isIndexed ? '✅ Đã vector hóa (tìm kiếm được)' : '⏳ Chưa vector hóa'}
+		</span>
+	</div>
+
+	<h2>{answers.length} Câu trả lời</h2>
+	<ul class="answer-list">
+		{#each sortedAnswers as a}
+			<li class:accepted={a.isAccepted}>
+				<div class="body-row">
+					<div class="vote-col">
+						<button
+							class="vote-btn"
+							disabled={!canUpvote}
+							title={canUpvote ? 'Upvote' : `Cần tối thiểu ${PRIVILEGE.UPVOTE} điểm reputation`}
+							onclick={() => vote('answer', a.id, 1)}
+						>
+							▲
+						</button>
+						<span class="score">{a.voteScore}</span>
+						<button
+							class="vote-btn"
+							disabled={!canDownvote}
+							title={canDownvote ? 'Downvote' : `Cần tối thiểu ${PRIVILEGE.DOWNVOTE} điểm reputation`}
+							onclick={() => vote('answer', a.id, -1)}
+						>
+							▼
+						</button>
+						{#if a.isAccepted}
+							<span class="accepted-badge" title="Câu trả lời được chấp nhận">✔</span>
+						{:else if isQuestionOwner}
+							<button class="accept-btn" onclick={() => handleAccept(a.id)}>Chấp nhận</button>
+						{/if}
+					</div>
+					<div class="body-content">
+						<p>{a.body}</p>
+						<CommentsSection targetType="answer" targetId={a.id} ownerId={a.authorId} />
+					</div>
+				</div>
+			</li>
+		{/each}
+		{#if answers.length === 0}
+			<p class="empty">Chưa có câu trả lời nào. Hãy là người đầu tiên trả lời!</p>
+		{/if}
+	</ul>
+
+	{#if $currentUser}
+		<h3>Câu trả lời của bạn</h3>
+		<form class="answer-form" onsubmit={submitAnswer}>
+			<textarea bind:value={newAnswerBody} rows="5" required placeholder="Viết câu trả lời..."
+			></textarea>
+			{#if answerError}<p class="error">{answerError}</p>{/if}
+			<button type="submit" disabled={postingAnswer || !newAnswerBody.trim()}>
+				{postingAnswer ? 'Đang đăng...' : 'Đăng câu trả lời'}
+			</button>
+		</form>
+	{:else}
+		<p class="login-hint"><a href="/login">Đăng nhập</a> để trả lời câu hỏi này.</p>
+	{/if}
+{/if}
+
+<style>
+	h1 {
+		margin-bottom: 0.5rem;
+	}
+	.tags {
+		display: flex;
+		gap: 0.4rem;
+		margin-bottom: 1rem;
+	}
+	.tag {
+		background: #e1ecf4;
+		color: #39739d;
+		text-decoration: none;
+		font-size: 0.8rem;
+		padding: 0.15rem 0.5rem;
+		border-radius: 4px;
+	}
+	.body-row {
+		display: flex;
+		gap: 1.5rem;
+	}
+	.vote-col {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.4rem;
+		min-width: 40px;
+	}
+	.vote-btn {
+		width: 36px;
+		height: 36px;
+		border-radius: 50%;
+		border: 1px solid #d0d5dd;
+		background: white;
+		font-size: 1rem;
+		cursor: pointer;
+	}
+	.vote-btn:disabled {
+		opacity: 0.35;
+		cursor: not-allowed;
+	}
+	.vote-btn:not(:disabled):hover {
+		background: #f0f5fb;
+		border-color: #0074cc;
+	}
+	.score {
+		font-size: 1.3rem;
+		font-weight: 700;
+	}
+	.accepted-badge {
+		color: #1a7a3a;
+		font-size: 1.4rem;
+	}
+	.accept-btn {
+		font-size: 0.7rem;
+		padding: 0.25rem 0.4rem;
+		border: 1px solid #1a7a3a;
+		color: #1a7a3a;
+		background: white;
+		border-radius: 4px;
+		cursor: pointer;
+	}
+	.accept-btn:hover {
+		background: #e8f7ed;
+	}
+	.body-content {
+		flex: 1;
+		line-height: 1.6;
+		white-space: pre-wrap;
+	}
+	.vote-msg {
+		font-size: 0.85rem;
+		color: #0074cc;
+		margin-top: 0.5rem;
+	}
+	.meta-box {
+		margin-top: 2rem;
+		padding-top: 1rem;
+		border-top: 1px solid #eaecef;
+		display: flex;
+		gap: 1.2rem;
+		font-size: 0.85rem;
+		color: #8a94a3;
+		flex-wrap: wrap;
+	}
+	.index-status.indexed {
+		color: #1a7a3a;
+	}
+	.error {
+		color: #d63384;
+	}
+	.answer-list {
+		list-style: none;
+		padding: 0;
+		margin: 0.5rem 0 0;
+	}
+	.answer-list li {
+		padding: 1rem 0;
+		border-bottom: 1px solid #eaecef;
+	}
+	.answer-list li.accepted {
+		background: #f4fbf6;
+	}
+	.empty {
+		color: #8a94a3;
+		font-size: 0.9rem;
+	}
+	.answer-form {
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
+		max-width: 700px;
+		margin-top: 0.5rem;
+	}
+	.answer-form textarea {
+		padding: 0.6rem 0.7rem;
+		border: 1px solid #d0d5dd;
+		border-radius: 6px;
+		font-size: 0.95rem;
+		font-family: inherit;
+	}
+	.answer-form button {
+		align-self: flex-start;
+		padding: 0.55rem 1.3rem;
+		border: none;
+		border-radius: 6px;
+		background: #0074cc;
+		color: white;
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.answer-form button:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+	.login-hint {
+		font-size: 0.9rem;
+		color: #5b6673;
+	}
+</style>
+</file>
+
+<file path="src/routes/questions/+page.svelte">
+<script lang="ts">
+	import { onMount } from 'svelte';
+	import { page } from '$app/state';
+	import { listQuestions, listTags, type Question, type Tag } from '$lib/api/client';
+
+	let questions = $state<Question[]>([]);
+	let tags = $state<Tag[]>([]);
+	let loading = $state(true);
+	let errorMsg = $state('');
+
+	let activeTag = $derived(page.url.searchParams.get('tag') ?? '');
+
+	async function load(tag: string) {
+		loading = true;
+		errorMsg = '';
+		try {
+			const [qRes, tRes] = await Promise.all([listQuestions(tag || undefined), listTags()]);
+			questions = qRes.questions;
+			tags = tRes.tags.slice(0, 20);
+		} catch {
+			errorMsg = 'Không tải được danh sách câu hỏi. Kiểm tra backend đã chạy chưa (http://localhost:8000).';
+		} finally {
+			loading = false;
+		}
+	}
+
+	onMount(() => load(activeTag));
+	$effect(() => {
+		load(activeTag);
+	});
+</script>
+
+<div class="header-row">
+	<h1>Câu hỏi{activeTag ? ` — tag: ${activeTag}` : ''}</h1>
+	<a class="btn" href="/ask">Đặt câu hỏi mới</a>
+</div>
+
+{#if tags.length > 0}
+	<div class="tag-cloud">
+		{#if activeTag}
+			<a class="tag-pill clear" href="/questions">✕ Bỏ lọc</a>
+		{/if}
+		{#each tags as t}
+			<a class="tag-pill" class:active={t.name === activeTag} href={`/questions?tag=${t.name}`}>
+				{t.name} <span class="count">{t.questionCount}</span>
+			</a>
+		{/each}
+	</div>
+{/if}
+
+{#if loading}
+	<p>Đang tải...</p>
+{:else if errorMsg}
+	<p class="error">{errorMsg}</p>
+{:else if questions.length === 0}
+	<p class="empty">Chưa có câu hỏi nào{activeTag ? ' với tag này' : ''}. Hãy là người đầu tiên đặt câu hỏi!</p>
+{:else}
+	<ul class="question-list">
+		{#each questions as q}
+			<li>
+				<div class="stats">
+					<span class="vote">{q.voteScore}<br /><small>votes</small></span>
+					<span class="answers" class:has-accepted={q.acceptedAnswerId}>
+						{q.answerCount}<br /><small>trả lời</small>
+					</span>
+				</div>
+				<div class="content">
+					<a class="title" href={`/questions/${q.id}`}>{q.title}</a>
+					<div class="tags">
+						{#each q.tags as tag}
+							<a class="tag" href={`/questions?tag=${tag}`}>{tag}</a>
+						{/each}
+					</div>
+					<div class="meta">
+						{q.viewCount} lượt xem · {new Date(q.createdAt).toLocaleDateString('vi-VN')}
+						{#if !q.isIndexed}
+							<span class="not-indexed" title="Chưa được vector hóa cho tìm kiếm ngữ nghĩa (Tuần 2)"
+								>· chưa index</span
+							>
+						{/if}
+					</div>
+				</div>
+			</li>
+		{/each}
+	</ul>
+{/if}
+
+<style>
+	.header-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 1rem;
+	}
+	.btn {
+		text-decoration: none;
+		background: #0074cc;
+		color: white;
+		padding: 0.5rem 1rem;
+		border-radius: 6px;
+		font-size: 0.9rem;
+	}
+	.question-list {
+		list-style: none;
+		padding: 0;
+		margin: 0;
+		display: flex;
+		flex-direction: column;
+	}
+	.question-list li {
+		display: flex;
+		gap: 1rem;
+		padding: 1rem 0;
+		border-bottom: 1px solid #eaecef;
+	}
+	.stats {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+		text-align: center;
+		min-width: 60px;
+		color: #5b6673;
+		font-size: 0.95rem;
+	}
+	.stats small {
+		color: #9aa4b2;
+		font-weight: normal;
+	}
+	.answers.has-accepted {
+		background: #d6f5dd;
+		border-radius: 6px;
+		color: #1a7a3a;
+	}
+	.content {
+		flex: 1;
+	}
+	.title {
+		color: #0074cc;
+		text-decoration: none;
+		font-weight: 600;
+		font-size: 1.05rem;
+	}
+	.tags {
+		margin: 0.4rem 0;
+		display: flex;
+		gap: 0.4rem;
+		flex-wrap: wrap;
+	}
+	.tag {
+		background: #e1ecf4;
+		color: #39739d;
+		text-decoration: none;
+		font-size: 0.78rem;
+		padding: 0.15rem 0.5rem;
+		border-radius: 4px;
+	}
+	.tag-cloud {
+		display: flex;
+		gap: 0.4rem;
+		flex-wrap: wrap;
+		margin-bottom: 1.2rem;
+	}
+	.tag-pill {
+		background: white;
+		border: 1px solid #d0d5dd;
+		color: #39739d;
+		text-decoration: none;
+		font-size: 0.78rem;
+		padding: 0.2rem 0.6rem;
+		border-radius: 999px;
+	}
+	.tag-pill.active {
+		background: #0074cc;
+		border-color: #0074cc;
+		color: white;
+	}
+	.tag-pill.clear {
+		color: #d63384;
+		border-color: #f3c6d8;
+	}
+	.tag-pill .count {
+		color: #9aa4b2;
+		font-size: 0.72rem;
+	}
+	.tag-pill.active .count {
+		color: #d7e9fa;
+	}
+	.meta {
+		font-size: 0.8rem;
+		color: #9aa4b2;
+	}
+	.not-indexed {
+		color: #c98a1f;
+	}
+	.error {
+		color: #d63384;
+	}
+	.empty {
+		color: #8a94a3;
+	}
+</style>
+</file>
+
+<file path="src/routes/register/+page.svelte">
+<script lang="ts">
+	import { register, ApiError } from '$lib/api/client';
+	import { setSession } from '$lib/stores/auth';
+	import { goto } from '$app/navigation';
+
+	let username = $state('');
+	let email = $state('');
+	let password = $state('');
+	let displayName = $state('');
+	let error = $state('');
+	let loading = $state(false);
+
+	async function handleSubmit(e: Event) {
+		e.preventDefault();
+		error = '';
+		loading = true;
+		try {
+			const { token, user } = await register({ username, email, password, displayName });
+			setSession(token, user);
+			goto('/questions');
+		} catch (err) {
+			error = err instanceof ApiError ? String(err.detail) : 'Đăng ký thất bại';
+		} finally {
+			loading = false;
+		}
+	}
+</script>
+
+<h1>Đăng ký tài khoản</h1>
+<p class="note">Reputation mặc định khi tạo tài khoản mới là <strong>1 điểm</strong> — đúng như cơ chế thật của Stack Overflow.</p>
+
+<form onsubmit={handleSubmit}>
+	<label>
+		Username
+		<input bind:value={username} required minlength="3" />
+	</label>
+	<label>
+		Email
+		<input type="email" bind:value={email} required />
+	</label>
+	<label>
+		Tên hiển thị (tuỳ chọn)
+		<input bind:value={displayName} />
+	</label>
+	<label>
+		Mật khẩu
+		<input type="password" bind:value={password} required minlength="6" />
+	</label>
+
+	{#if error}<p class="error">{error}</p>{/if}
+
+	<button type="submit" disabled={loading}>{loading ? 'Đang xử lý...' : 'Đăng ký'}</button>
+</form>
+
+<p class="switch">Đã có tài khoản? <a href="/login">Đăng nhập</a></p>
+
+<style>
+	form {
+		display: flex;
+		flex-direction: column;
+		gap: 0.9rem;
+		max-width: 380px;
+	}
+	label {
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+		font-size: 0.9rem;
+		color: #3b4759;
+	}
+	input {
+		padding: 0.55rem 0.7rem;
+		border: 1px solid #d0d5dd;
+		border-radius: 6px;
+		font-size: 0.95rem;
+	}
+	button {
+		padding: 0.65rem;
+		border: none;
+		border-radius: 6px;
+		background: #0074cc;
+		color: white;
+		font-weight: 600;
+		cursor: pointer;
+	}
+	button:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+	.error {
+		color: #d63384;
+		font-size: 0.85rem;
+	}
+	.note {
+		color: #5b6673;
+		font-size: 0.9rem;
+		max-width: 380px;
+	}
+	.switch {
+		margin-top: 1rem;
+		font-size: 0.9rem;
+	}
+</style>
+</file>
+
+<file path="src/routes/search/+page.svelte">
+<script lang="ts">
+	import { searchTfidf, ApiError, type SearchResultItem } from '$lib/api/client';
+
+	let query = $state('');
+	let results = $state<SearchResultItem[]>([]);
+	let elapsedMs = $state<number | null>(null);
+	let loading = $state(false);
+	let errorMsg = $state('');
+	let searched = $state(false);
+
+	async function runSearch(e?: Event) {
+		e?.preventDefault();
+		if (!query.trim()) return;
+		loading = true;
+		errorMsg = '';
+		searched = true;
+		try {
+			const res = await searchTfidf(query);
+			results = res.results;
+			elapsedMs = res.elapsedMs;
+		} catch (err) {
+			results = [];
+			elapsedMs = null;
+			if (err instanceof ApiError) {
+				errorMsg = typeof err.detail === 'string' ? err.detail : 'Tìm kiếm thất bại';
+			} else {
+				errorMsg = 'Tìm kiếm thất bại - kiểm tra backend đã reindex chưa (POST /api/admin/search/reindex).';
+			}
+		} finally {
+			loading = false;
+		}
+	}
+</script>
+
+<h1>Tìm kiếm ngữ nghĩa</h1>
+<p class="subtitle">
+	Tìm kiếm bằng <strong>TF-IDF</strong> (Vector Space Model cổ điển) + Cosine Similarity trên tiêu đề câu hỏi.
+</p>
+
+<form onsubmit={runSearch} class="search-form">
+	<input
+		bind:value={query}
+		placeholder="Nhập câu hỏi hoặc từ khóa, vd: 'lỗi kết nối cơ sở dữ liệu'..."
+	/>
+	<button type="submit" disabled={loading}>{loading ? 'Đang tìm...' : 'Tìm kiếm'}</button>
+</form>
+
+{#if elapsedMs !== null}
+	<p class="timing">⏱ Trả về trong <strong>{elapsedMs}ms</strong> ({results.length} kết quả)</p>
+{/if}
+
+{#if errorMsg}
+	<p class="error">{errorMsg}</p>
+{/if}
+
+{#if searched && !loading && !errorMsg && results.length === 0}
+	<p class="empty">
+		Không tìm thấy kết quả liên quan. Đảm bảo backend đã chạy
+		<code>POST /api/admin/search/reindex</code> ít nhất 1 lần sau khi seed dữ liệu.
+	</p>
+{/if}
+
+<ul class="result-list">
+	{#each results as r}
+		<li>
+			<div class="score-col">
+				<span class="score">{r.similarityPercent}%</span>
+				<small>tương đồng</small>
+			</div>
+			<div class="content">
+				<a class="title" href={`/questions/${r.questionId}`}>{r.title}</a>
+				<div class="tags">
+					{#each r.tags as tag}
+						<span class="tag">{tag}</span>
+					{/each}
+				</div>
+				<div class="meta">{r.voteScore} votes · {r.answerCount} trả lời</div>
+			</div>
+		</li>
+	{/each}
+</ul>
+
+<style>
+	.subtitle {
+		color: #5b6673;
+		font-size: 0.9rem;
+		margin-top: -0.5rem;
+	}
+	.search-form {
+		display: flex;
+		gap: 0.6rem;
+		margin: 1.2rem 0 0.8rem;
+	}
+	.search-form input {
+		flex: 1;
+		padding: 0.65rem 0.9rem;
+		border: 1px solid #d0d5dd;
+		border-radius: 6px;
+		font-size: 1rem;
+	}
+	.search-form button {
+		padding: 0.65rem 1.3rem;
+		border: none;
+		border-radius: 6px;
+		background: #0074cc;
+		color: white;
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.search-form button:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+	.timing {
+		font-size: 0.85rem;
+		color: #5b6673;
+		margin-bottom: 0.8rem;
+	}
+	.error {
+		color: #d63384;
+	}
+	.empty {
+		color: #8a94a3;
+	}
+	.result-list {
+		list-style: none;
+		padding: 0;
+		margin: 0;
+	}
+	.result-list li {
+		display: flex;
+		gap: 1rem;
+		padding: 0.9rem 0;
+		border-bottom: 1px solid #eaecef;
+	}
+	.score-col {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		min-width: 70px;
+		text-align: center;
+	}
+	.score {
+		font-size: 1.1rem;
+		font-weight: 700;
+		color: #0074cc;
+	}
+	.score-col small {
+		color: #9aa4b2;
+		font-size: 0.72rem;
+	}
+	.content {
+		flex: 1;
+	}
+	.title {
+		color: #0074cc;
+		text-decoration: none;
+		font-weight: 600;
+		font-size: 1.02rem;
+	}
+	.tags {
+		margin: 0.35rem 0;
+		display: flex;
+		gap: 0.4rem;
+		flex-wrap: wrap;
+	}
+	.tag {
+		background: #e1ecf4;
+		color: #39739d;
+		font-size: 0.76rem;
+		padding: 0.15rem 0.5rem;
+		border-radius: 4px;
+	}
+	.meta {
+		font-size: 0.8rem;
+		color: #9aa4b2;
+	}
+</style>
+</file>
+
+<file path="src/routes/+layout.svelte">
+<script lang="ts">
+	import favicon from '$lib/assets/favicon.svg';
+	import { onMount } from 'svelte';
+	import { currentUser, authReady, restoreSession, clearSession } from '$lib/stores/auth';
+
+	let { children } = $props();
+
+	onMount(() => {
+		restoreSession();
+	});
+
+	function handleLogout() {
+		clearSession();
+		window.location.href = '/';
+	}
+</script>
+
+<svelte:head>
+	<link rel="icon" href={favicon} />
+</svelte:head>
+
+<div class="app-shell">
+	<header>
+		<a href="/" class="brand">📚 Knowledge Hub</a>
+		<nav>
+			<a href="/questions">Câu hỏi</a>
+			<a href="/search">🔍 Tìm kiếm</a>
+			{#if $currentUser}
+				<a href="/ask">Đặt câu hỏi</a>
+			{/if}
+			{#if $currentUser?.isAdmin}
+				<a href="/admin">Quản trị</a>
+			{/if}
+		</nav>
+		<div class="auth-area">
+			{#if !$authReady}
+				<span class="muted">Đang tải...</span>
+			{:else if $currentUser}
+				<span class="rep-badge" title="Điểm reputation">
+					{$currentUser.displayName} · {$currentUser.reputation} rep
+					{#if $currentUser.isAdmin}<span class="admin-tag">Admin</span>{/if}
+				</span>
+				<button onclick={handleLogout}>Đăng xuất</button>
+			{:else}
+				<a href="/login">Đăng nhập</a>
+				<a href="/register">Đăng ký</a>
+			{/if}
+		</div>
+	</header>
+
+	<main>
+		{@render children()}
+	</main>
+</div>
+
+<style>
+	:global(body) {
+		margin: 0;
+		font-family:
+			system-ui,
+			-apple-system,
+			'Segoe UI',
+			sans-serif;
+		background: #f8f9fa;
+		color: #1a1a2e;
+	}
+
+	.app-shell {
+		min-height: 100vh;
+		display: flex;
+		flex-direction: column;
+	}
+
+	header {
+		display: flex;
+		align-items: center;
+		gap: 1.5rem;
+		padding: 0.75rem 1.5rem;
+		background: white;
+		border-bottom: 1px solid #e2e5e9;
+		position: sticky;
+		top: 0;
+		z-index: 10;
+	}
+
+	.brand {
+		font-weight: 700;
+		text-decoration: none;
+		color: #1a1a2e;
+		font-size: 1.1rem;
+	}
+
+	nav {
+		display: flex;
+		gap: 1rem;
+		flex: 1;
+	}
+
+	nav a {
+		text-decoration: none;
+		color: #3b4759;
+		font-size: 0.95rem;
+	}
+
+	nav a:hover {
+		color: #0074cc;
+	}
+
+	.auth-area {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		font-size: 0.9rem;
+	}
+
+	.auth-area a {
+		text-decoration: none;
+		color: #0074cc;
+	}
+
+	.rep-badge {
+		background: #f0f5fb;
+		padding: 0.3rem 0.7rem;
+		border-radius: 6px;
+		font-weight: 500;
+	}
+
+	.admin-tag {
+		background: #d63384;
+		color: white;
+		font-size: 0.7rem;
+		padding: 0.1rem 0.4rem;
+		border-radius: 4px;
+		margin-left: 0.4rem;
+	}
+
+	.muted {
+		color: #8a94a3;
+	}
+
+	button {
+		background: none;
+		border: 1px solid #d0d5dd;
+		border-radius: 6px;
+		padding: 0.35rem 0.7rem;
+		cursor: pointer;
+		font-size: 0.85rem;
+	}
+
+	button:hover {
+		background: #f2f4f7;
+	}
+
+	main {
+		flex: 1;
+		max-width: 900px;
+		width: 100%;
+		margin: 0 auto;
+		padding: 1.5rem;
+		box-sizing: border-box;
+	}
+</style>
+</file>
+
+<file path="src/routes/+page.svelte">
+<script lang="ts">
+	import { currentUser } from '$lib/stores/auth';
+</script>
+
+<section class="hero">
+	<h1>Hệ thống quản trị tri thức</h1>
+	<p>
+		Đặt câu hỏi, chia sẻ kiến thức, tìm kiếm bài viết theo tiêu đề bằng mô hình
+		Vector Space Model (TF-IDF / Sentence-BERT) + Cosine Similarity.
+	</p>
+	<div class="actions">
+		<a class="btn primary" href="/questions">Xem câu hỏi</a>
+		{#if $currentUser}
+			<a class="btn" href="/ask">Đặt câu hỏi mới</a>
+		{:else}
+			<a class="btn" href="/register">Bắt đầu ngay</a>
+		{/if}
+	</div>
+</section>
+
+<style>
+	.hero {
+		text-align: center;
+		padding: 3rem 1rem;
+	}
+	h1 {
+		font-size: 2rem;
+		margin-bottom: 0.5rem;
+	}
+	p {
+		color: #5b6673;
+		max-width: 560px;
+		margin: 0 auto 1.5rem;
+	}
+	.actions {
+		display: flex;
+		gap: 0.75rem;
+		justify-content: center;
+	}
+	.btn {
+		text-decoration: none;
+		padding: 0.6rem 1.2rem;
+		border-radius: 8px;
+		border: 1px solid #0074cc;
+		color: #0074cc;
+		font-weight: 500;
+	}
+	.btn.primary {
+		background: #0074cc;
+		color: white;
+	}
+</style>
+</file>
+
+<file path="src/app.d.ts">
+// See https://svelte.dev/docs/kit/types#app.d.ts
+// for information about these interfaces
+declare global {
+	namespace App {
+		// interface Error {}
+		// interface Locals {}
+		// interface PageData {}
+		// interface PageState {}
+		// interface Platform {}
+	}
+}
+
+export {};
+</file>
+
+<file path="src/app.html">
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="text-scale" content="scale" />
+		%sveltekit.head%
+	</head>
+	<body data-sveltekit-preload-data="hover">
+		<div style="display: contents">%sveltekit.body%</div>
+	</body>
+</html>
+</file>
+
+<file path="static/robots.txt">
+# allow crawling everything by default
+User-agent: *
+Disallow:
+</file>
+
+<file path=".env.example">
+VITE_API_BASE_URL=http://localhost:8000
+</file>
+
+<file path=".gitignore">
+node_modules/
+.svelte-kit/
+build/
+.env
+</file>
+
+<file path=".npmrc">
+engine-strict=true
+</file>
+
+<file path="package.json">
+{
+	"name": "frontend",
+	"private": true,
+	"version": "0.0.1",
+	"type": "module",
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build",
+		"preview": "vite preview",
+		"prepare": "svelte-kit sync || echo ''",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
+	},
+	"devDependencies": {
+		"@sveltejs/adapter-auto": "^7.0.1",
+		"@sveltejs/adapter-static": "^3.0.10",
+		"@sveltejs/kit": "^2.63.0",
+		"@sveltejs/vite-plugin-svelte": "^7.1.2",
+		"svelte": "^5.56.1",
+		"svelte-check": "^4.6.0",
+		"typescript": "^6.0.3",
+		"vite": "^8.0.16"
+	}
+}
+</file>
+
+<file path="README.md">
+# Frontend Svelte — Hệ thống quản trị tri thức (Đề tài 3)
+
+SvelteKit (Svelte 5, runes mode) + TypeScript. Chế độ SPA (adapter-static, fallback
+index.html) vì toàn bộ dữ liệu fetch phía client từ backend FastAPI, không dùng SSR.
+
+## ✅ Đã kiểm thử thật (không chỉ svelte-check suông)
+- `npm run check` (svelte-check + TypeScript) → **0 lỗi, 0 cảnh báo**
+- `npm run build` → build production thành công
+- Đã dựng **backend thật (FastAPI + mongomock, seed 400 câu hỏi + reindex TF-IDF)** và
+  **frontend dev server thật** chạy song song trong sandbox, sau đó:
+  - curl toàn bộ 7 route (`/`, `/questions`, `/search`, `/login`, `/register`, `/ask`,
+    `/admin`) → tất cả trả HTTP 200, đúng nội dung mong đợi (đã grep các chuỗi UI như
+    "TF-IDF", "Trang quản trị" trong HTML trả về)
+  - Gọi thẳng chuỗi API mà UI mới gọi (login → tạo câu hỏi → tạo answer → accept answer →
+    tạo comment → search TF-IDF) bằng curl để xác nhận **shape JSON khớp chính xác** với
+    các TypeScript interface trong `src/lib/api/client.ts` (không lệch field name)
+
+## Yêu cầu
+- Node.js >= 18
+- Backend đang chạy tại `http://localhost:8000` (xem `../backend-py/README.md`) — **đã
+  chạy `seed.py` + `seed_questions.py` + gọi `POST /api/admin/search/reindex` ít nhất 1
+  lần**, nếu không trang `/search` sẽ không có dữ liệu để trả về.
+
+## Cài đặt & chạy
+```bash
+cd frontend
+npm install
+cp .env.example .env    # chỉnh VITE_API_BASE_URL nếu backend chạy port khác
+npm run dev              # mở http://localhost:5173
+```
+
+## Các trang đã có
+| Route | Chức năng |
+|---|---|
+| `/` | Trang chủ |
+| `/login` | Đăng nhập — có sẵn nút điền nhanh 7 tài khoản test (khớp `app/seed.py` bên backend) |
+| `/register` | Đăng ký (reputation mặc định = 1) |
+| `/questions` | Danh sách câu hỏi + **tag cloud lọc theo tag** (click tag hoặc mở `?tag=...`) |
+| `/questions/[id]` | Chi tiết câu hỏi: Upvote/Downvote, **danh sách câu trả lời** (xếp accepted lên đầu), **form đăng câu trả lời**, **nút "Chấp nhận"** (chỉ hiện cho tác giả câu hỏi), **bình luận** trên cả câu hỏi lẫn từng câu trả lời (tự disable nếu <50 rep và không phải bài của mình) |
+| `/ask` | Form đặt câu hỏi mới (yêu cầu đăng nhập) |
+| `/search` | **Tìm kiếm ngữ nghĩa** — nhập câu hỏi, tìm bằng TF-IDF, xem % tương đồng + thời gian phản hồi |
+| `/admin` | Chỉ hiện cho user `isAdmin=true`: quản lý user (khóa/mở khóa, chỉnh reputation tay), quản lý tag (sửa mô tả/xóa), nút **Reindex toàn bộ** + xem log benchmark thời gian phản hồi |
+
+## Điểm quan trọng: UI phản ánh đúng cơ chế reputation-gated
+File `src/lib/stores/auth.ts` định nghĩa lại đúng bảng `PRIVILEGE` khớp với backend
+(`app/core/privileges.py`) để:
+- Nút Upvote/Downvote tự disable + tooltip giải thích ngay trên UI khi chưa đủ điểm.
+- Ô nhập bình luận tự disable + placeholder giải thích nếu <50 rep và không phải bài của mình
+  (component `src/lib/components/CommentsSection.svelte`, dùng chung cho cả question và answer).
+- Nút "Chấp nhận" câu trả lời chỉ hiện với tác giả câu hỏi (`isQuestionOwner` derived state).
+- **Lưu ý:** đây chỉ là UX convenience — nguồn sự thật (source of truth) vẫn là backend,
+  vì FE có thể bị bypass. Đã kiểm chứng bằng curl trực tiếp: backend vẫn chặn đúng theo
+  `dev_e2e_test.py` (42/42 test PASS) dù không đi qua UI.
+
+## Trang tìm kiếm (`/search`) — chi tiết
+- Tìm kiếm bằng **TF-IDF** (Vector Space Model cổ điển) + Cosine Similarity trên tiêu đề.
+- Hiển thị `similarityPercent` (điểm tương đồng %) và `elapsedMs` (thời gian phản hồi) trả
+  về từ backend — dùng trực tiếp để demo/chụp ảnh cho báo cáo.
+
+## Cấu trúc thư mục (phần mới thêm)
+```
+src/
+  lib/
+    api/client.ts          # + answers/comments/tags/search/admin API functions
+    components/
+      CommentsSection.svelte  # component dùng chung cho comment trên question & answer
+  routes/
+    search/+page.svelte       # trang tìm kiếm TF-IDF
+    admin/+page.svelte         # trang quản trị (chỉ admin)
+    questions/[id]/+page.svelte  # viết lại: + answers, accept-answer, comments
+    questions/+page.svelte        # + tag cloud lọc theo tag
+```
+
+## Việc tiếp theo (theo đúng kế hoạch)
+- Test toàn luồng thủ công với MongoDB thật.
+- Vẽ biểu đồ Precision@K / thời gian phản hồi từ `search_benchmark_log` cho báo cáo.
+- Viết báo cáo, làm slide, quay demo dự phòng (Ngày 19-21).
+</file>
+
+<file path="tsconfig.json">
+{
+	"extends": "./.svelte-kit/tsconfig.json",
+	"compilerOptions": {
+		"rewriteRelativeImportExtensions": true,
+		"allowJs": true,
+		"checkJs": true,
+		"esModuleInterop": true,
+		"forceConsistentCasingInFileNames": true,
+		"resolveJsonModule": true,
+		"skipLibCheck": true,
+		"sourceMap": true,
+		"strict": true,
+		"moduleResolution": "bundler"
+	}
+	// Path aliases are handled by https://svelte.dev/docs/kit/configuration#alias
+	// except $lib which is handled by https://svelte.dev/docs/kit/configuration#files
+	//
+	// To make changes to top-level options such as include and exclude, we recommend extending
+	// the generated config; see https://svelte.dev/docs/kit/configuration#typescript
+}
+</file>
+
+<file path="vite.config.ts">
+import adapter from '@sveltejs/adapter-static';
+import { sveltekit } from '@sveltejs/kit/vite';
+import { defineConfig } from 'vite';
+
+export default defineConfig({
+	plugins: [
+		sveltekit({
+			compilerOptions: {
+				// Force runes mode for the project, except for libraries. Can be removed in svelte 6.
+				runes: ({ filename }) =>
+					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
+			},
+
+			// Dùng adapter-static ở chế độ SPA (fallback index.html) vì toàn bộ dữ liệu
+			// được fetch phía client (onMount) từ backend FastAPI, không dùng SSR load function.
+			adapter: adapter({
+				fallback: 'index.html'
+			})
+		})
+	]
+});
+</file>
+
+</files>

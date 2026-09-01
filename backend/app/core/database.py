@@ -12,7 +12,6 @@ comments_col = db["comments"]
 votes_col = db["votes"]
 tags_col = db["tags"]
 question_vectors_tfidf_col = db["question_vectors_tfidf"]
-question_vectors_sbert_col = db["question_vectors_sbert"]
 tfidf_vocabulary_col = db["tfidf_vocabulary"]
 search_benchmark_log_col = db["search_benchmark_log"]  # log thời gian phản hồi mỗi lần search - dùng cho báo cáo
 

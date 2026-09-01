@@ -2,8 +2,7 @@
 Tiền xử lý văn bản dùng chung cho TF-IDF (index lẫn query) - phải áp dụng CÙNG một hàm
 cho cả lúc build chỉ mục và lúc encode câu truy vấn, nếu không vector sẽ lệch không gian.
 
-SBERT KHÔNG dùng module này - model pretrained tự học biểu diễn tốt nhất trên câu gốc,
-tiền xử lý kiểu tách từ/bỏ stopword thường làm giảm chất lượng embedding ngữ nghĩa.
+Tiền xử lý áp dụng cho cả lúc build chỉ mục lẫn lúc encode truy vấn của mô hình TF-IDF.
 """
 import re
 

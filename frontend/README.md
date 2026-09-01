@@ -10,7 +10,7 @@ index.html) vì toàn bộ dữ liệu fetch phía client từ backend FastAPI, 
   **frontend dev server thật** chạy song song trong sandbox, sau đó:
   - curl toàn bộ 7 route (`/`, `/questions`, `/search`, `/login`, `/register`, `/ask`,
     `/admin`) → tất cả trả HTTP 200, đúng nội dung mong đợi (đã grep các chuỗi UI như
-    "TF-IDF", "SBERT", "Trang quản trị" trong HTML trả về)
+    "TF-IDF", "Trang quản trị" trong HTML trả về)
   - Gọi thẳng chuỗi API mà UI mới gọi (login → tạo câu hỏi → tạo answer → accept answer →
     tạo comment → search TF-IDF) bằng curl để xác nhận **shape JSON khớp chính xác** với
     các TypeScript interface trong `src/lib/api/client.ts` (không lệch field name)
@@ -38,7 +38,7 @@ npm run dev              # mở http://localhost:5173
 | `/questions` | Danh sách câu hỏi + **tag cloud lọc theo tag** (click tag hoặc mở `?tag=...`) |
 | `/questions/[id]` | Chi tiết câu hỏi: Upvote/Downvote, **danh sách câu trả lời** (xếp accepted lên đầu), **form đăng câu trả lời**, **nút "Chấp nhận"** (chỉ hiện cho tác giả câu hỏi), **bình luận** trên cả câu hỏi lẫn từng câu trả lời (tự disable nếu <50 rep và không phải bài của mình) |
 | `/ask` | Form đặt câu hỏi mới (yêu cầu đăng nhập) |
-| `/search` | **Tìm kiếm ngữ nghĩa** — nhập câu hỏi, chọn TF-IDF hoặc SBERT, xem % tương đồng + thời gian phản hồi |
+| `/search` | **Tìm kiếm ngữ nghĩa** — nhập câu hỏi, tìm bằng TF-IDF, xem % tương đồng + thời gian phản hồi |
 | `/admin` | Chỉ hiện cho user `isAdmin=true`: quản lý user (khóa/mở khóa, chỉnh reputation tay), quản lý tag (sửa mô tả/xóa), nút **Reindex toàn bộ** + xem log benchmark thời gian phản hồi |
 
 ## Điểm quan trọng: UI phản ánh đúng cơ chế reputation-gated
@@ -53,11 +53,9 @@ File `src/lib/stores/auth.ts` định nghĩa lại đúng bảng `PRIVILEGE` kh�
   `dev_e2e_test.py` (42/42 test PASS) dù không đi qua UI.
 
 ## Trang tìm kiếm (`/search`) — chi tiết
-- 2 nút chuyển đổi TF-IDF / SBERT — đổi phương pháp sẽ tự chạy lại truy vấn hiện tại.
+- Tìm kiếm bằng **TF-IDF** (Vector Space Model cổ điển) + Cosine Similarity trên tiêu đề.
 - Hiển thị `similarityPercent` (điểm tương đồng %) và `elapsedMs` (thời gian phản hồi) trả
-  về từ backend — dùng trực tiếp để demo/chụp ảnh cho báo cáo so sánh 2 phương pháp.
-- Nếu SBERT chưa sẵn sàng trên server (chưa cài `sentence-transformers` hoặc không có
-  mạng để tải model), UI hiện thông báo rõ ràng thay vì lỗi khó hiểu (bắt lỗi HTTP 503).
+  về từ backend — dùng trực tiếp để demo/chụp ảnh cho báo cáo.
 
 ## Cấu trúc thư mục (phần mới thêm)
 ```
@@ -67,15 +65,13 @@ src/
     components/
       CommentsSection.svelte  # component dùng chung cho comment trên question & answer
   routes/
-    search/+page.svelte       # trang tìm kiếm TF-IDF/SBERT
+    search/+page.svelte       # trang tìm kiếm TF-IDF
     admin/+page.svelte         # trang quản trị (chỉ admin)
     questions/[id]/+page.svelte  # viết lại: + answers, accept-answer, comments
     questions/+page.svelte        # + tag cloud lọc theo tag
 ```
 
 ## Việc tiếp theo (theo đúng kế hoạch)
-- Test toàn luồng thủ công với MongoDB thật + `sentence-transformers` cài đầy đủ (sandbox
-  soạn code này không cài được `sentence-transformers`/MongoDB thật do giới hạn mạng —
-  xem lưu ý trong `../backend-py/README.md`).
-- Vẽ biểu đồ so sánh Precision@K / thời gian phản hồi từ `search_benchmark_log` cho báo cáo.
+- Test toàn luồng thủ công với MongoDB thật.
+- Vẽ biểu đồ Precision@K / thời gian phản hồi từ `search_benchmark_log` cho báo cáo.
 - Viết báo cáo, làm slide, quay demo dự phòng (Ngày 19-21).
