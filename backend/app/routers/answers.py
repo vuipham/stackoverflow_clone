@@ -13,11 +13,30 @@ from app.services.reputation_service import adjust_reputation
 router = APIRouter(tags=["answers"])
 
 
-def serialize_answer(a: dict) -> dict:
+from app.core.database import answers_col, questions_col, comments_col, votes_col, users_col
+
+
+async def serialize_answer(a: dict, author_cache: dict = None) -> dict:
+    author_info = None
+    author_id_str = str(a["authorId"])
+    if author_cache and author_id_str in author_cache:
+        author_info = author_cache[author_id_str]
+    else:
+        user = await users_col.find_one({"_id": a["authorId"]})
+        if user:
+            author_info = {
+                "id": str(user["_id"]),
+                "displayName": user.get("displayName", user.get("username", "User")),
+                "reputation": user.get("reputation", 1),
+            }
+            if author_cache is not None:
+                author_cache[author_id_str] = author_info
+
     return {
         "id": str(a["_id"]),
         "questionId": str(a["questionId"]),
-        "authorId": str(a["authorId"]),
+        "authorId": author_id_str,
+        "author": author_info,
         "body": a["body"],
         "voteScore": a.get("voteScore", 0),
         "isAccepted": a.get("isAccepted", False),
@@ -40,7 +59,17 @@ async def list_answers(question_id: str):
     cursor = answers_col.find({"questionId": ObjectId(question_id)}).sort(
         [("isAccepted", -1), ("voteScore", -1), ("createdAt", 1)]
     )
-    answers = [serialize_answer(a) async for a in cursor]
+    docs = [a async for a in cursor]
+    author_ids = list({a["authorId"] for a in docs})
+    authors = {
+        str(u["_id"]): {
+            "id": str(u["_id"]),
+            "displayName": u.get("displayName", u.get("username", "User")),
+            "reputation": u.get("reputation", 1),
+        }
+        async for u in users_col.find({"_id": {"$in": author_ids}})
+    }
+    answers = [await serialize_answer(a, author_cache=authors) for a in docs]
     return {"answers": answers}
 
 
@@ -65,7 +94,7 @@ async def create_answer(
     doc["_id"] = result.inserted_id
 
     await questions_col.update_one({"_id": q["_id"]}, {"$inc": {"answerCount": 1}})
-    return {"answer": serialize_answer(doc)}
+    return {"answer": await serialize_answer(doc)}
 
 
 @router.put("/api/answers/{answer_id}")
@@ -81,7 +110,7 @@ async def update_answer(answer_id: str, payload: AnswerUpdateRequest, current_us
 
     await answers_col.update_one({"_id": a["_id"]}, {"$set": {"body": payload.body}})
     updated = await answers_col.find_one({"_id": a["_id"]})
-    return {"answer": serialize_answer(updated)}
+    return {"answer": await serialize_answer(updated)}
 
 
 @router.delete("/api/answers/{answer_id}")
@@ -130,4 +159,4 @@ async def accept_answer(answer_id: str, current_user: dict = Depends(get_current
     await adjust_reputation(str(a["authorId"]), REPUTATION_DELTA["ANSWER_ACCEPTED"], "answer_accepted", str(a["_id"]))
 
     updated = await answers_col.find_one({"_id": a["_id"]})
-    return {"answer": serialize_answer(updated)}
+    return {"answer": await serialize_answer(updated)}

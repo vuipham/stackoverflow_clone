@@ -1,6 +1,6 @@
 """
 Nạp dataset mẫu (~400 tiêu đề câu hỏi đa chủ đề) vào MongoDB để có dữ liệu thật
-cho việc build/test/benchmark module tìm kiếm ngữ nghĩa (TF-IDF + SBERT) ở Tuần 2.
+cho việc build/test/benchmark module tìm kiếm ngữ nghĩa (TF-IDF) ở Tuần 2.
 Chạy SAU app.seed (cần có sẵn user để gán authorId).
 
 Chạy: python -m app.seed_questions

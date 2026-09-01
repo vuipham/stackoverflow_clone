@@ -1,5 +1,5 @@
 """
-Benchmark so sánh TF-IDF vs SBERT: Precision@5, Precision@10, thời gian phản hồi.
+Benchmark đánh giá chất lượng tìm kiếm TF-IDF: Precision@5, Precision@10, thời gian phản hồi.
 Kết quả dùng thẳng cho báo cáo (Phần thực nghiệm) - Ngày 18-19 kế hoạch.
 
 Cách chấm "relevant": vì dataset seed (`seed_questions.py`) có gắn tag rõ ràng theo chủ đề,
@@ -7,8 +7,7 @@ Cách chấm "relevant": vì dataset seed (`seed_questions.py`) có gắn tag r�
 `tags` của câu hỏi trả về - đây là cách xấp xỉ khách quan, tự động hóa được cho bộ truy vấn
 tự soạn (không cần gán nhãn tay từng cặp query-question).
 
-Yêu cầu: đã chạy `python -m app.seed_questions` (có dữ liệu) và MongoDB đang chạy thật
-(không dùng mongomock ở đây, vì cần chạy được sentence-transformers).
+Yêu cầu: đã chạy `python -m app.seed_questions` (có dữ liệu) và MongoDB đang chạy thật.
 
 Chạy: python -m app.benchmark_search
 """
@@ -16,7 +15,7 @@ import asyncio
 import time
 
 from app.core.database import search_benchmark_log_col
-from app.services.search import tfidf_service, sbert_service
+from app.services.search import tfidf_service
 
 # 15 câu truy vấn tự soạn, đa dạng chủ đề, kèm tag "đúng" dùng để tính Precision@K
 TEST_QUERIES = [
@@ -55,12 +54,7 @@ async def hydrate(scored):
 async def run():
     print("[Benchmark] Đảm bảo chỉ mục là mới nhất - đang reindex toàn bộ...")
     tfidf_stats = await tfidf_service.reindex_all()
-    sbert_stats = await sbert_service.reindex_all()
     print(f"[Benchmark] TF-IDF reindex: {tfidf_stats}")
-    print(f"[Benchmark] SBERT reindex: {sbert_stats}")
-
-    if sbert_service.get_model() is None:
-        print("[Benchmark] CẢNH BÁO: model SBERT không sẵn sàng - bỏ qua phần SBERT.")
 
     rows = []
     for tc in TEST_QUERIES:
@@ -71,35 +65,22 @@ async def run():
         tfidf_ms = (time.perf_counter() - t0) * 1000
         tfidf_results = await hydrate(tfidf_scored)
 
-        row = {
-            "query": query,
-            "tfidf_ms": round(tfidf_ms, 2),
-            "tfidf_p5": precision_at_k(tfidf_results, tag, 5),
-            "tfidf_p10": precision_at_k(tfidf_results, tag, 10),
-        }
-
-        if sbert_service.get_model() is not None:
-            t0 = time.perf_counter()
-            sbert_scored = sbert_service.search(query, top_k=10)
-            sbert_ms = (time.perf_counter() - t0) * 1000
-            sbert_results = await hydrate(sbert_scored)
-            row.update(
-                {
-                    "sbert_ms": round(sbert_ms, 2),
-                    "sbert_p5": precision_at_k(sbert_results, tag, 5),
-                    "sbert_p10": precision_at_k(sbert_results, tag, 10),
-                }
-            )
-        rows.append(row)
+        rows.append(
+            {
+                "query": query,
+                "tfidf_ms": round(tfidf_ms, 2),
+                "tfidf_p5": precision_at_k(tfidf_results, tag, 5),
+                "tfidf_p10": precision_at_k(tfidf_results, tag, 10),
+            }
+        )
 
     print("\n" + "=" * 100)
-    header = f"{'Query':<45} {'TF-IDF ms':>10} {'P@5':>6} {'P@10':>6} | {'SBERT ms':>10} {'P@5':>6} {'P@10':>6}"
+    header = f"{'Query':<45} {'TF-IDF ms':>10} {'P@5':>6} {'P@10':>6}"
     print(header)
     print("-" * 100)
     for r in rows:
         print(
-            f"{r['query'][:45]:<45} {r['tfidf_ms']:>10.2f} {r['tfidf_p5']:>6.2f} {r['tfidf_p10']:>6.2f} | "
-            f"{r.get('sbert_ms', 0):>10.2f} {r.get('sbert_p5', 0):>6.2f} {r.get('sbert_p10', 0):>6.2f}"
+            f"{r['query'][:45]:<45} {r['tfidf_ms']:>10.2f} {r['tfidf_p5']:>6.2f} {r['tfidf_p10']:>6.2f}"
         )
 
     n = len(rows)
@@ -107,25 +88,15 @@ async def run():
     avg_tfidf_p5 = sum(r["tfidf_p5"] for r in rows) / n
     avg_tfidf_p10 = sum(r["tfidf_p10"] for r in rows) / n
     print("-" * 100)
-    print(f"{'TRUNG BÌNH':<45} {avg_tfidf_ms:>10.2f} {avg_tfidf_p5:>6.2f} {avg_tfidf_p10:>6.2f}", end="")
+    print(f"{'TRUNG BÌNH':<45} {avg_tfidf_ms:>10.2f} {avg_tfidf_p5:>6.2f} {avg_tfidf_p10:>6.2f}")
+    print("=" * 100)
 
     summary = {
         "tfidf": {"avgMs": round(avg_tfidf_ms, 2), "avgP5": round(avg_tfidf_p5, 3), "avgP10": round(avg_tfidf_p10, 3)}
     }
-    if sbert_service.get_model() is not None:
-        avg_sbert_ms = sum(r["sbert_ms"] for r in rows) / n
-        avg_sbert_p5 = sum(r["sbert_p5"] for r in rows) / n
-        avg_sbert_p10 = sum(r["sbert_p10"] for r in rows) / n
-        print(f" | {avg_sbert_ms:>10.2f} {avg_sbert_p5:>6.2f} {avg_sbert_p10:>6.2f}")
-        summary["sbert"] = {
-            "avgMs": round(avg_sbert_ms, 2), "avgP5": round(avg_sbert_p5, 3), "avgP10": round(avg_sbert_p10, 3)
-        }
-    else:
-        print()
-    print("=" * 100)
 
     await search_benchmark_log_col.insert_one({"method": "benchmark_summary", "summary": summary, "rows": rows})
-    print("\n[Benchmark] Đã lưu kết quả vào collection `search_benchmark_log` (method=benchmark_summary) để đưa vào báo cáo.")
+    print("\n[Benchmark] Kết quả đã lưu vào collection `search_benchmark_log` (method=benchmark_summary) để đưa vào báo cáo.")
 
 
 if __name__ == "__main__":

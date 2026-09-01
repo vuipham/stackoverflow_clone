@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 export class ApiError extends Error {
 	status: number;
@@ -75,12 +75,19 @@ export function fetchMe() {
 }
 
 // ---- Questions ----
+export interface AuthorInfo {
+	id: string;
+	displayName: string;
+	reputation: number;
+}
+
 export interface Question {
 	id: string;
 	title: string;
 	body: string;
 	tags: string[];
 	authorId: string;
+	author?: AuthorInfo | null;
 	viewCount: number;
 	voteScore: number;
 	answerCount: number;
@@ -90,9 +97,17 @@ export interface Question {
 	updatedAt: string;
 }
 
-export function listQuestions(tag?: string) {
-	const qs = tag ? `?tag=${encodeURIComponent(tag)}` : '';
-	return request<{ questions: Question[] }>(`/api/questions${qs}`);
+export interface ListQuestionsResponse {
+	questions: Question[];
+	total: number;
+	page: number;
+	limit: number;
+	totalPages: number;
+}
+
+export function listQuestions(tag?: string, page = 1, limit = 20, sort = 'newest') {
+	const tagParam = tag ? `tag=${encodeURIComponent(tag)}&` : '';
+	return request<ListQuestionsResponse>(`/api/questions?${tagParam}sort=${sort}&page=${page}&limit=${limit}`);
 }
 
 export function getQuestion(id: string) {
@@ -125,6 +140,7 @@ export interface Answer {
 	id: string;
 	questionId: string;
 	authorId: string;
+	author?: AuthorInfo | null;
 	body: string;
 	voteScore: number;
 	isAccepted: boolean;
@@ -200,10 +216,10 @@ export function listTags() {
 	return request<{ tags: Tag[] }>('/api/tags');
 }
 
-export function updateTag(tagId: string, description: string) {
+export function updateTag(tagId: string, payload: { description?: string; name?: string }) {
 	return request<{ tag: Tag }>(`/api/tags/${tagId}`, {
 		method: 'PUT',
-		body: { description },
+		body: payload,
 		auth: true
 	});
 }
@@ -227,21 +243,19 @@ export interface SearchResultItem {
 }
 
 export interface SearchResponse {
-	method: 'tfidf' | 'sbert';
+	method: 'tfidf';
 	query: string;
 	elapsedMs: number;
 	results: SearchResultItem[];
+	total: number;
+	page: number;
+	size: number;
+	totalPages: number;
 }
 
-export function searchTfidf(q: string, topK = 10) {
+export function searchTfidf(q: string, page = 1, size = 15, minScore = 0.0) {
 	return request<SearchResponse>(
-		`/api/search/tfidf?q=${encodeURIComponent(q)}&top_k=${topK}`
-	);
-}
-
-export function searchSbert(q: string, topK = 10) {
-	return request<SearchResponse>(
-		`/api/search/sbert?q=${encodeURIComponent(q)}&top_k=${topK}`
+		`/api/search/tfidf?q=${encodeURIComponent(q)}&page=${page}&size=${size}&min_score=${minScore}`
 	);
 }
 
@@ -278,7 +292,7 @@ export function adminAdjustReputation(userId: string, delta: number, reason = 'a
 }
 
 export function adminTriggerReindex() {
-	return request<{ tfidf: unknown; sbert: unknown }>('/api/admin/search/reindex', {
+	return request<{ tfidf: unknown }>('/api/admin/search/reindex', {
 		method: 'POST',
 		auth: true
 	});
@@ -296,4 +310,57 @@ export function adminGetBenchmarkLog(limit = 50) {
 		`/api/admin/search/benchmark-log?limit=${limit}`,
 		{ auth: true }
 	);
+}
+
+export function mergeTag(sourceTagId: string, targetTagId: string) {
+	return request<{ message: string; tag: Tag; questionsMigrated: number }>('/api/tags/merge', {
+		method: 'POST',
+		body: { sourceTagId, targetTagId },
+		auth: true
+	});
+}
+
+// ---- Users / Profile ----
+export interface ReputationLogEntry {
+	delta: number;
+	reason: string;
+	refId: string | null;
+	at: string | null;
+}
+
+export interface UserProfile {
+	user: {
+		id: string;
+		username: string;
+		email?: string;
+		displayName: string;
+		reputation: number;
+		isAdmin: boolean;
+		isBanned: boolean;
+	};
+	reputationLog: ReputationLogEntry[];
+	questions: {
+		id: string;
+		title: string;
+		tags: string[];
+		voteScore: number;
+		answerCount: number;
+		createdAt: string;
+	}[];
+	answers: {
+		id: string;
+		questionId: string;
+		body: string;
+		voteScore: number;
+		isAccepted: boolean;
+		createdAt: string;
+	}[];
+}
+
+export function getMyProfile() {
+	return request<UserProfile>('/api/users/me/profile', { auth: true });
+}
+
+export function getUserProfile(userId: string) {
+	return request<UserProfile>(`/api/users/${userId}`);
 }

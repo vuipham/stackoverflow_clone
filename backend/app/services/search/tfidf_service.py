@@ -49,8 +49,24 @@ def encode_title(title: str) -> tuple[dict[int, float], float]:
     return _encode_tokens(preprocess(title))
 
 
+import difflib
+
+
 def encode_query(query: str) -> tuple[dict[int, float], float]:
-    return _encode_tokens(preprocess(query))
+    tokens = preprocess(query)
+    resolved_tokens = []
+    vocab_keys = list(_cache.vocab.keys())
+
+    for t in tokens:
+        if t in _cache.vocab:
+            resolved_tokens.append(t)
+        else:
+            # Fuzzy match: Nếu gõ sai từ (vd: databade -> database), tự động sửa chính tả từ gần nhất
+            matches = difflib.get_close_matches(t, vocab_keys, n=1, cutoff=0.7)
+            if matches:
+                resolved_tokens.append(matches[0])
+
+    return _encode_tokens(resolved_tokens)
 
 
 def cosine(vec_a: dict[int, float], norm_a: float, vec_b: dict[int, float], norm_b: float) -> float:
@@ -85,18 +101,29 @@ async def reindex_all() -> dict:
     """
     Xây lại TOÀN BỘ vocabulary + vector từ đầu (dùng khi mới seed data, hoặc dataset đã
     tăng đáng kể - Phần 2.8.2 kế hoạch). Trả về thống kê thời gian để ghi log benchmark.
+    Index cả Tiêu đề (nhân đôi trọng số) lẫn Nội dung chi tiết (Body) để tìm kiếm linh hoạt.
     """
     t0 = time.perf_counter()
 
-    questions = [q async for q in questions_col.find({}, {"title": 1})]
+    questions = [q async for q in questions_col.find({}, {"title": 1, "body": 1})]
     if not questions:
         return {"indexed": 0, "elapsedMs": 0}
 
-    preprocessed = [" ".join(preprocess(q["title"])) for q in questions]
+    preprocessed = [
+        " ".join(preprocess(f"{q.get('title', '')} {q.get('title', '')} {q.get('body', '')}"))
+        for q in questions
+    ]
 
     # norm=None: giữ trọng số TF-IDF thô, TỰ tính norm riêng để cosine = dot/(norm_a*norm_b)
     # đúng như công thức trong kế hoạch (Phần 3), thay vì để sklearn tự L2-normalize.
-    vectorizer = TfidfVectorizer(tokenizer=str.split, preprocessor=lambda x: x, token_pattern=None, norm=None)
+    # max_features=30000 để từ điển tối ưu, kích thước BSON document ~9.5MB, nằm an toàn dưới ngưỡng 16MB của MongoDB.
+    vectorizer = TfidfVectorizer(
+        tokenizer=str.split,
+        preprocessor=lambda x: x,
+        token_pattern=None,
+        norm=None,
+        max_features=30000,
+    )
     matrix = vectorizer.fit_transform(preprocessed)  # scipy sparse csr
 
     new_version = _cache.version + 1 if _cache.loaded and _cache.vocab else 1
@@ -135,10 +162,12 @@ async def reindex_all() -> dict:
         )
         new_doc_vectors[str(q["_id"])] = ({int(k): v for k, v in vector_sparse.items()}, norm)
 
-    # Xóa vector cũ (version cũ) rồi ghi vector mới - tránh lẫn nhiều version trong collection
+    # Xóa vector cũ (version cũ) rồi ghi vector mới theo từng batch 50,000 bản ghi
     await question_vectors_tfidf_col.delete_many({})
-    if doc_vector_writes:
-        await question_vectors_tfidf_col.insert_many(doc_vector_writes)
+    batch_size = 50000
+    for b in range(0, len(doc_vector_writes), batch_size):
+        await question_vectors_tfidf_col.insert_many(doc_vector_writes[b : b + batch_size])
+
     await questions_col.update_many({}, {"$set": {"isIndexed": True}})
 
     _cache.vocab = vocab
@@ -152,14 +181,15 @@ async def reindex_all() -> dict:
     return {"indexed": len(questions), "dimension": dimension, "version": new_version, "elapsedMs": round(elapsed_ms, 2)}
 
 
-async def index_single_question(question_id, title: str):
+async def index_single_question(question_id, title: str, body: str = ""):
     """
     Re-index 1 câu hỏi bằng vocab HIỆN HÀNH (không retrain) - dùng khi tạo/sửa câu hỏi.
     Nếu chưa từng reindex_all() (chưa có vocab), bỏ qua - admin cần trigger reindex trước.
     """
     if not _cache.loaded or not _cache.vocab:
         return
-    vec, norm = encode_title(title)
+    full_text = f"{title} {title} {body}"
+    vec, norm = _encode_tokens(preprocess(full_text))
     doc = {
         "questionId": question_id,
         "vectorSparse": {str(k): v for k, v in vec.items()},
@@ -182,8 +212,12 @@ async def remove_question(question_id):
     _cache.doc_vectors.pop(str(question_id), None)
 
 
-def search(query: str, top_k: int = 10) -> list[tuple[str, float]]:
-    """Trả về [(questionId, score), ...] sắp xếp giảm dần theo cosine similarity."""
+def search(query: str, min_score: float = 0.0) -> list[tuple[str, float]]:
+    """
+    Trả về [(questionId, score), ...] sắp xếp giảm dần theo cosine similarity.
+    Không giới hạn top_k — trả về TẤT CẢ kết quả có score > min_score.
+    Phân trang xảy ra ở tầng API (router), giống cách Stack Overflow hoạt động thật.
+    """
     if not _cache.vocab:
         return []
     q_vec, q_norm = encode_query(query)
@@ -193,6 +227,6 @@ def search(query: str, top_k: int = 10) -> list[tuple[str, float]]:
         (qid, cosine(q_vec, q_norm, vec, norm))
         for qid, (vec, norm) in _cache.doc_vectors.items()
     ]
-    scored = [s for s in scored if s[1] > 0]
+    scored = [s for s in scored if s[1] > min_score]
     scored.sort(key=lambda x: x[1], reverse=True)
-    return scored[:top_k]
+    return scored

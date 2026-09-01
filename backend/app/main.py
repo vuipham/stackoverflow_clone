@@ -3,8 +3,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.database import ensure_indexes
-from app.routers import auth, questions, votes, answers, comments, tags, admin, search
-from app.services.search import tfidf_service, sbert_service
+from app.routers import auth, questions, votes, answers, comments, tags, admin, search, users
+from app.services.search import tfidf_service
 
 
 @asynccontextmanager
@@ -16,12 +16,6 @@ async def lifespan(app: FastAPI):
     # từ lần reindex trước đó (nếu có) - không load lại từ đầu mỗi lần search.
     await tfidf_service.load_cache_from_db()
     print(f"[Search] TF-IDF cache: {tfidf_service.get_stats()}")
-
-    # Model SBERT load 1 lần, giữ RAM suốt vòng đời service (Phần 4). Nếu môi trường chưa
-    # tải được model (không có mạng), app vẫn khởi động bình thường - chỉ /api/search/sbert lỗi.
-    sbert_service.get_model()
-    await sbert_service.load_cache_from_db()
-    print(f"[Search] SBERT cache: {sbert_service.get_stats()}")
 
     yield
 
@@ -43,6 +37,7 @@ app.include_router(comments.router)
 app.include_router(tags.router)
 app.include_router(admin.router)
 app.include_router(search.router)
+app.include_router(users.router)
 
 
 @app.get("/health")
