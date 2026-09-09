@@ -1,9 +1,33 @@
 <script lang="ts">
-	let { content = '' }: { content: string } = $props();
+	let { content = '', highlight = '' }: { content: string; highlight?: string } = $props();
+
+	// Tách các term tìm kiếm từ chuỗi highlight (bỏ [tag], -term, key:value)
+	function extractTerms(q: string): string[] {
+		const terms = new Set<string>();
+		const tokens = q.match(/[A-Za-z0-9À-ỹà-ỹ_+#][A-Za-z0-9À-ỹà-ỹ_+#.-]*/g) ?? [];
+		for (const raw of tokens) {
+			if (raw.startsWith('[', 0) || raw.startsWith('-')) continue;
+			const lower = raw.toLowerCase();
+			if (lower.length >= 3) terms.add(lower);
+		}
+		return [...terms];
+	}
+
+	// Chèn sentinel quanh các term khớp (trước khi escape HTML) để cuối cùng thay bằng <mark>
+	function applyHighlight(text: string, terms: string[]): string {
+		if (!text || terms.length === 0) return text;
+		const pattern = terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+		const re = new RegExp(`(${pattern})`, 'gi');
+		return text.replace(re, '\u0001$1\u0002');
+	}
 
 	function renderSimpleMarkdown(text: string) {
 		if (!text) return '';
-		
+
+		const terms = extractTerms(highlight);
+		// Đánh dấu term bằng sentinel trước khi escape, để không bị biến thành &lt;mark&gt;
+		text = applyHighlight(text, terms);
+
 		// Escape HTML
 		let html = text
 			.replace(/&/g, '&amp;')
@@ -31,7 +55,7 @@
 
 		// Line breaks & paragraphs
 		const paragraphs = html.split(/\n\n+/);
-		return paragraphs
+		html = paragraphs
 			.map((p) => {
 				if (p.startsWith('<pre') || p.startsWith('<h1') || p.startsWith('<h2') || p.startsWith('<h3')) {
 					return p;
@@ -39,6 +63,10 @@
 				return `<p>${p.replace(/\n/g, '<br/>')}</p>`;
 			})
 			.join('');
+
+		// Khôi phục sentinel thành <mark> (highlight kiểu Stack Overflow)
+		html = html.replace(/\u0001/g, '<mark>').replace(/\u0002/g, '</mark>');
+		return html;
 	}
 </script>
 
@@ -88,5 +116,12 @@
 	.so-markdown-content :global(h3) {
 		color: #0c0d0e;
 		margin: 1rem 0 0.5rem;
+	}
+
+	.so-markdown-content :global(mark) {
+		background: #ffe58f;
+		color: #0c0d0e;
+		padding: 0 0.1em;
+		border-radius: 2px;
 	}
 </style>

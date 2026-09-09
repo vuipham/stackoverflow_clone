@@ -1,22 +1,89 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { getMyProfile, ApiError, type UserProfile } from '$lib/api/client';
+	import { page } from '$app/state';
+	import { getMyProfile, getUserProfile, updateProfile, ApiError, type UserProfile } from '$lib/api/client';
 	import { currentUser, authReady } from '$lib/stores/auth';
+	import { showToast } from '$lib/stores/toast';
 	import { goto } from '$app/navigation';
 
-	let profile = $state<UserProfile | null>(null);
+	let profile = $state<UserProfile & { badges?: { badgeCode: string; name: string; tier: string; description: string }[] } | null>(null);
 	let loading = $state(true);
 	let errorMsg = $state('');
-	let activeTab = $state<'reputation' | 'questions' | 'answers'>('questions');
+	let activeTab = $state<'reputation' | 'questions' | 'answers' | 'badges'>('badges');
 
-	onMount(() => {
-		const unsub = authReady.subscribe((ready) => {
-			if (ready) {
-				if (!$currentUser) goto('/login');
-				else loadProfile();
+	// ---- Chỉnh sửa hồ sơ (UC009) ----
+	let editing = $state(false);
+	let editName = $state('');
+	let editEmail = $state('');
+	let saving = $state(false);
+	let saveError = $state('');
+
+	let isOwnProfile = $derived(
+		!page.url.searchParams.get('id') || page.url.searchParams.get('id') === $currentUser?.id
+	);
+
+	function startEdit() {
+		if (!profile) return;
+		editName = profile.user.displayName;
+		editEmail = profile.user.email ?? '';
+		saveError = '';
+		editing = true;
+	}
+
+	function cancelEdit() {
+		editing = false;
+		saveError = '';
+	}
+
+	async function saveProfile() {
+		if (!profile) return;
+		const name = editName.trim();
+		const email = editEmail.trim();
+		if (name.length < 3 || name.length > 50) {
+			saveError = 'Tên hiển thị phải từ 3 đến 50 ký tự';
+			return;
+		}
+		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+			saveError = 'Email không hợp lệ';
+			return;
+		}
+		// Chỉ gửi trường thực sự thay đổi
+		const payload: { displayName?: string; email?: string } = {};
+		if (name !== profile.user.displayName) payload.displayName = name;
+		if (email !== (profile.user.email ?? '')) payload.email = email;
+		if (Object.keys(payload).length === 0) {
+			editing = false;
+			return;
+		}
+		saving = true;
+		saveError = '';
+		try {
+			const res = await updateProfile(payload);
+			profile = { ...profile, user: { ...profile.user, ...res.user } };
+			if ($currentUser) currentUser.set({ ...$currentUser, displayName: res.user.displayName, email: res.user.email });
+			showToast(res.message || 'Đã cập nhật hồ sơ thành công', 'success');
+			editing = false;
+		} catch (err) {
+			const msg = err instanceof ApiError ? String(err.detail) : 'Không thể cập nhật hồ sơ';
+			saveError = msg;
+			showToast(msg, 'error');
+		} finally {
+			saving = false;
+		}
+	}
+
+	$effect(() => {
+		const targetId = page.url.searchParams.get('id');
+		if (targetId) {
+			loadUserProfile(targetId);
+		} else if ($authReady) {
+			if (!$currentUser) {
+				loading = false;
+				goto('/login');
+			} else {
+				loadProfile();
 			}
-		});
-		return unsub;
+		}
 	});
 
 	async function loadProfile() {
@@ -26,6 +93,18 @@
 			profile = await getMyProfile();
 		} catch (err) {
 			errorMsg = err instanceof ApiError ? String(err.detail) : 'Không thể tải hồ sơ';
+		} finally {
+			loading = false;
+		}
+	}
+
+	async function loadUserProfile(userId: string) {
+		loading = true;
+		errorMsg = '';
+		try {
+			profile = await getUserProfile(userId);
+		} catch (err) {
+			errorMsg = err instanceof ApiError ? String(err.detail) : 'Không thể tải hồ sơ người dùng';
 		} finally {
 			loading = false;
 		}
@@ -42,6 +121,8 @@
 			downvote_reversed: '↔ Đổi downvote → upvote',
 			downvote_cast_cancelled: '↩ Hoàn chi phí downvote',
 			answer_accepted: '✔ Câu trả lời được chấp nhận',
+			bounty_created: '💰 Treo thưởng Bounty',
+			bounty_won: '💰 Nhận thưởng Bounty',
 			admin_adjust: '⚙️ Quản trị viên điều chỉnh'
 		};
 		return labels[reason] ?? reason;
@@ -49,7 +130,7 @@
 </script>
 
 <svelte:head>
-	<title>Hồ sơ cá nhân</title>
+	<title>{profile?.user.displayName ?? 'Hồ sơ người dùng'} - Knowledge Hub</title>
 </svelte:head>
 
 {#if loading}
@@ -67,9 +148,37 @@
 				<span class="rep-label">điểm reputation</span>
 			</div>
 		</div>
+		{#if isOwnProfile && !editing}
+			<button class="edit-btn" onclick={startEdit}>✏️ Chỉnh sửa hồ sơ</button>
+		{/if}
 	</div>
 
+	{#if editing && isOwnProfile}
+		<div class="edit-form">
+			<h2>Chỉnh sửa hồ sơ</h2>
+			<label>
+				Tên hiển thị
+				<input bind:value={editName} minlength="3" maxlength="50" placeholder="Ví dụ: Nguyễn Văn A" />
+			</label>
+			<label>
+				Email
+				<input type="email" bind:value={editEmail} placeholder="you@example.com" />
+			</label>
+			<p class="hint">Username không thể thay đổi.</p>
+			{#if saveError}<p class="error">{saveError}</p>{/if}
+			<div class="form-actions">
+				<button class="btn-save" onclick={saveProfile} disabled={saving}>
+					{saving ? 'Đang lưu...' : 'Lưu thay đổi'}
+				</button>
+				<button class="btn-cancel" onclick={cancelEdit} disabled={saving}>Hủy</button>
+			</div>
+		</div>
+	{/if}
+
 	<div class="tabs">
+		<button class:active={activeTab === 'badges'} onclick={() => (activeTab = 'badges')}>
+			🏆 Huy hiệu ({(profile.badges || []).length})
+		</button>
 		<button class:active={activeTab === 'questions'} onclick={() => (activeTab = 'questions')}>
 			Câu hỏi ({profile.questions.length})
 		</button>
@@ -81,7 +190,26 @@
 		</button>
 	</div>
 
-	{#if activeTab === 'questions'}
+	{#if activeTab === 'badges'}
+		{#if !profile.badges || profile.badges.length === 0}
+			<p class="empty">Chưa có huy hiệu nào. Hãy tham gia đặt câu hỏi và trả lời để nhận huy hiệu!</p>
+		{:else}
+			<div class="badges-grid">
+				{#each profile.badges as b}
+					<div class={`badge-card ${b.tier}`}>
+						<span class="badge-icon">
+							{b.tier === 'gold' ? '🥇' : b.tier === 'silver' ? '🥈' : '🥉'}
+						</span>
+						<div class="badge-info">
+							<strong class="badge-title">{b.name}</strong>
+							<p class="badge-desc">{b.description}</p>
+						</div>
+					</div>
+				{/each}
+			</div>
+		{/if}
+
+	{:else if activeTab === 'questions'}
 		{#if profile.questions.length === 0}
 			<p class="empty">Chưa có câu hỏi nào.</p>
 		{:else}
@@ -198,6 +326,100 @@
 		font-size: 0.8rem;
 		color: #8a94a3;
 	}
+	.edit-btn {
+		align-self: flex-start;
+		margin-left: auto;
+		background: #f8f9fa;
+		border: 1px solid #9fa6ad;
+		border-radius: 4px;
+		padding: 0.45rem 0.85rem;
+		font-size: 0.82rem;
+		color: #525960;
+		cursor: pointer;
+	}
+	.edit-btn:hover {
+		background: #f1f2f3;
+		border-color: #0074cc;
+		color: #0074cc;
+	}
+	.edit-form {
+		background: #f8f9fa;
+		border: 1px solid #d6d9dc;
+		border-radius: 6px;
+		padding: 1.2rem 1.4rem;
+		margin-bottom: 1.4rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.7rem;
+	}
+	.edit-form h2 {
+		margin: 0;
+		font-size: 1.05rem;
+		color: #232629;
+	}
+	.edit-form label {
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+		font-size: 0.85rem;
+		font-weight: 600;
+		color: #3b4045;
+	}
+	.edit-form input {
+		padding: 0.5rem 0.7rem;
+		border: 1px solid #babfc4;
+		border-radius: 4px;
+		font-size: 0.9rem;
+	}
+	.edit-form input:focus {
+		outline: none;
+		border-color: #0a95ff;
+		box-shadow: 0 0 0 3px rgba(10, 149, 255, 0.15);
+	}
+	.hint {
+		margin: 0;
+		font-size: 0.78rem;
+		color: #8a94a3;
+	}
+	.success {
+		margin: 0;
+		color: #1a7a3a;
+		font-size: 0.85rem;
+	}
+	.form-actions {
+		display: flex;
+		gap: 0.6rem;
+	}
+	.btn-save {
+		background: #0a95ff;
+		color: white;
+		border: none;
+		border-radius: 4px;
+		padding: 0.5rem 1rem;
+		font-size: 0.86rem;
+		font-weight: 500;
+		cursor: pointer;
+	}
+	.btn-save:hover {
+		background: #0074cc;
+	}
+	.btn-save:disabled {
+		opacity: 0.6;
+		cursor: default;
+	}
+	.btn-cancel {
+		background: white;
+		color: #525960;
+		border: 1px solid #9fa6ad;
+		border-radius: 4px;
+		padding: 0.5rem 1rem;
+		font-size: 0.86rem;
+		cursor: pointer;
+	}
+	.btn-cancel:hover {
+		background: #f1f2f3;
+	}
+
 	.tabs {
 		display: flex;
 		gap: 0;
@@ -268,6 +490,59 @@
 		color: #9aa4b2;
 		font-size: 0.78rem;
 	}
+	.badges-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+		gap: 1rem;
+	}
+
+	.badge-card {
+		background: white;
+		border: 1px solid #d6d9dc;
+		border-radius: 6px;
+		padding: 0.8rem;
+		display: flex;
+		align-items: flex-start;
+		gap: 0.7rem;
+	}
+
+	.badge-card.bronze {
+		border-left: 4px solid #ab6a15;
+		background: #fffdf9;
+	}
+
+	.badge-card.silver {
+		border-left: 4px solid #6a737c;
+		background: #f8f9f9;
+	}
+
+	.badge-card.gold {
+		border-left: 4px solid #b28d00;
+		background: #fffdf0;
+	}
+
+	.badge-icon {
+		font-size: 1.4rem;
+		line-height: 1;
+	}
+
+	.badge-info {
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+	}
+
+	.badge-title {
+		font-size: 0.9rem;
+		color: #232629;
+	}
+
+	.badge-desc {
+		font-size: 0.78rem;
+		color: #6a737c;
+		margin: 0;
+	}
+
 	.positive {
 		color: #1a7a3a;
 		font-weight: 600;

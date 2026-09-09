@@ -1,167 +1,147 @@
 {
-  "dataset_size": 400,
-  "reindex": {
-    "elapsed_ms": 52.56,
-    "dimension": 185,
-    "version": 1
+  "summary": {
+    "avgClientMs": 56.98,
+    "avgServerMs": 50.22,
+    "avgP5": 0.507,
+    "avgP10": 0.467,
+    "repeat": 3,
+    "base_url": "http://localhost:8000"
   },
-  "queries": [
+  "rows": [
     {
       "query": "cách kết nối cơ sở dữ liệu MongoDB",
       "relevant_tag": "mongodb",
-      "avg_ms": 0.46,
-      "min_ms": 0.394,
-      "max_ms": 0.654,
-      "top1_score": 0.3854,
-      "num_results": 10,
-      "precision_at_5": 0.0
+      "client_ms": 69.14,
+      "server_ms": 58.72,
+      "total_matches": 478686,
+      "p5": 0.4,
+      "p10": 0.2
     },
     {
       "query": "lỗi khi dùng React trong dự án",
       "relevant_tag": "react",
-      "avg_ms": 0.411,
-      "min_ms": 0.376,
-      "max_ms": 0.452,
-      "top1_score": 0.7593,
-      "num_results": 10,
-      "precision_at_5": 0.2
+      "client_ms": 78.13,
+      "server_ms": 75.26,
+      "total_matches": 1000000,
+      "p5": 1.0,
+      "p10": 0.8
     },
     {
       "query": "tối ưu hiệu năng Docker container",
       "relevant_tag": "docker",
-      "avg_ms": 0.367,
-      "min_ms": 0.35,
-      "max_ms": 0.385,
-      "top1_score": 0.8284,
-      "num_results": 10,
-      "precision_at_5": 0.2
+      "client_ms": 78.78,
+      "server_ms": 66.07,
+      "total_matches": 1000003,
+      "p5": 0.8,
+      "p10": 0.8
     },
     {
       "query": "xác thực người dùng bằng JWT",
       "relevant_tag": "jwt",
-      "avg_ms": 0.361,
-      "min_ms": 0.337,
-      "max_ms": 0.406,
-      "top1_score": 0.5096,
-      "num_results": 10,
-      "precision_at_5": 1.0
+      "client_ms": 69.12,
+      "server_ms": 61.74,
+      "total_matches": 1000000,
+      "p5": 1.0,
+      "p10": 1.0
     },
     {
-      "query": "triển khai mô hình học máy",
-      "relevant_tag": "machine-learning",
-      "avg_ms": 0.313,
-      "min_ms": 0.3,
-      "max_ms": 0.335,
-      "top1_score": 0.3212,
-      "num_results": 10,
-      "precision_at_5": 0.0
+      "query": "triển khai mô hình học máy bằng Python",
+      "relevant_tag": "python",
+      "client_ms": 69.94,
+      "server_ms": 63.56,
+      "total_matches": 1000002,
+      "p5": 1.0,
+      "p10": 0.7
     },
     {
-      "query": "xử lý ngôn ngữ tự nhiên tiếng Việt",
-      "relevant_tag": "nlp",
-      "avg_ms": 0.317,
-      "min_ms": 0.302,
-      "max_ms": 0.342,
-      "top1_score": 0.543,
-      "num_results": 10,
-      "precision_at_5": 0.0
+      "query": "tối ưu hiệu năng cho hệ thống",
+      "relevant_tag": "performance",
+      "client_ms": 82.62,
+      "server_ms": 76.61,
+      "total_matches": 1000003,
+      "p5": 0.0,
+      "p10": 0.0
     },
     {
       "query": "so sánh Python với Node.js",
-      "relevant_tag": "python",
-      "avg_ms": 0.361,
-      "min_ms": 0.342,
-      "max_ms": 0.412,
-      "top1_score": 0.3561,
-      "num_results": 10,
-      "precision_at_5": 0.0
+      "relevant_tag": "nodejs",
+      "client_ms": 43.94,
+      "server_ms": 35.6,
+      "total_matches": 198249,
+      "p5": 0.2,
+      "p10": 0.1
     },
     {
       "query": "thiết lập Kubernetes cluster",
       "relevant_tag": "kubernetes",
-      "avg_ms": 0.296,
-      "min_ms": 0.28,
-      "max_ms": 0.317,
-      "top1_score": 0.5778,
-      "num_results": 5,
-      "precision_at_5": 1.0
+      "client_ms": 45.71,
+      "server_ms": 35.47,
+      "total_matches": 230108,
+      "p5": 0.2,
+      "p10": 0.2
     },
     {
       "query": "viết unit test cho FastAPI",
       "relevant_tag": "fastapi",
-      "avg_ms": 0.361,
-      "min_ms": 0.34,
-      "max_ms": 0.401,
-      "top1_score": 0.5169,
-      "num_results": 10,
-      "precision_at_5": 0.0
+      "client_ms": 41.69,
+      "server_ms": 33.19,
+      "total_matches": 260148,
+      "p5": 1.0,
+      "p10": 0.8
     },
     {
-      "query": "tìm kiếm vector bằng Qdrant",
-      "relevant_tag": "qdrant",
-      "avg_ms": 0.305,
-      "min_ms": 0.3,
-      "max_ms": 0.32,
-      "top1_score": 0.3622,
-      "num_results": 10,
-      "precision_at_5": 0.4
+      "query": "tìm kiếm toàn văn với Elasticsearch",
+      "relevant_tag": "elasticsearch",
+      "client_ms": 52.21,
+      "server_ms": 43.27,
+      "total_matches": 399192,
+      "p5": 0.6,
+      "p10": 0.7
     },
     {
-      "query": "tính độ tương đồng cosine similarity",
-      "relevant_tag": "cosine-similarity",
-      "avg_ms": 0.34,
-      "min_ms": 0.32,
-      "max_ms": 0.38,
-      "top1_score": 0.6403,
-      "num_results": 10,
-      "precision_at_5": 1.0
+      "query": "bảo mật API với JWT token",
+      "relevant_tag": "security",
+      "client_ms": 44.66,
+      "server_ms": 40.92,
+      "total_matches": 271190,
+      "p5": 0.2,
+      "p10": 0.1
     },
     {
-      "query": "cấu hình CI/CD với GitHub Actions",
-      "relevant_tag": "github-actions",
-      "avg_ms": 0.384,
-      "min_ms": 0.365,
-      "max_ms": 0.401,
-      "top1_score": 0.4149,
-      "num_results": 10,
-      "precision_at_5": 0.2
+      "query": "thiết lập pipeline CI/CD",
+      "relevant_tag": "devops",
+      "client_ms": 45.09,
+      "server_ms": 41.59,
+      "total_matches": 78226,
+      "p5": 0.2,
+      "p10": 0.1
     },
     {
       "query": "deploy ứng dụng Django lên AWS",
       "relevant_tag": "django",
-      "avg_ms": 0.397,
-      "min_ms": 0.367,
-      "max_ms": 0.436,
-      "top1_score": 0.3141,
-      "num_results": 10,
-      "precision_at_5": 0.0
+      "client_ms": 47.2,
+      "server_ms": 45.43,
+      "total_matches": 438807,
+      "p5": 0.0,
+      "p10": 0.2
     },
     {
       "query": "sử dụng Redis để cache dữ liệu",
       "relevant_tag": "redis",
-      "avg_ms": 0.359,
-      "min_ms": 0.343,
-      "max_ms": 0.378,
-      "top1_score": 0.519,
-      "num_results": 10,
-      "precision_at_5": 1.0
+      "client_ms": 50.61,
+      "server_ms": 44.46,
+      "total_matches": 296489,
+      "p5": 0.0,
+      "p10": 0.3
     },
     {
-      "query": "xây dựng REST API chuẩn",
-      "relevant_tag": "rest-api",
-      "avg_ms": 0.314,
-      "min_ms": 0.299,
-      "max_ms": 0.339,
-      "top1_score": 0.6529,
-      "num_results": 10,
-      "precision_at_5": 1.0
+      "query": "xây dựng API với Express",
+      "relevant_tag": "express",
+      "client_ms": 35.9,
+      "server_ms": 31.47,
+      "total_matches": 235508,
+      "p5": 1.0,
+      "p10": 1.0
     }
-  ],
-  "summary": {
-    "avg_response_ms": 0.356,
-    "max_response_ms": 0.46,
-    "min_response_ms": 0.296,
-    "mean_precision_at_5": 0.4,
-    "under_1s_requirement": true
-  }
+  ]
 }

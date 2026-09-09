@@ -93,6 +93,10 @@ export interface Question {
 	answerCount: number;
 	acceptedAnswerId: string | null;
 	isIndexed: boolean;
+	isClosed?: boolean;
+	closeReason?: string | null;
+	bounty?: number;
+	bountyExpiresAt?: string | null;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -117,6 +121,17 @@ export function getQuestion(id: string) {
 export function createQuestion(payload: { title: string; body: string; tags: string[] }) {
 	return request<{ question: Question }>('/api/questions', {
 		method: 'POST',
+		body: payload,
+		auth: true
+	});
+}
+
+export function updateQuestion(
+	questionId: string,
+	payload: { title?: string; body?: string; tags?: string[] }
+) {
+	return request<{ question: Question }>(`/api/questions/${questionId}`, {
+		method: 'PUT',
 		body: payload,
 		auth: true
 	});
@@ -154,6 +169,14 @@ export function listAnswers(questionId: string) {
 export function createAnswer(questionId: string, body: string) {
 	return request<{ answer: Answer }>(`/api/questions/${questionId}/answers`, {
 		method: 'POST',
+		body: { body },
+		auth: true
+	});
+}
+
+export function updateAnswer(answerId: string, body: string) {
+	return request<{ answer: Answer }>(`/api/answers/${answerId}`, {
+		method: 'PUT',
 		body: { body },
 		auth: true
 	});
@@ -238,6 +261,8 @@ export interface SearchResultItem {
 	tags: string[];
 	voteScore: number;
 	answerCount: number;
+	isAccepted?: boolean;
+	createdAt?: string | null;
 	similarityScore: number;
 	similarityPercent: number;
 }
@@ -245,6 +270,7 @@ export interface SearchResultItem {
 export interface SearchResponse {
 	method: 'tfidf';
 	query: string;
+	sort?: string;
 	elapsedMs: number;
 	results: SearchResultItem[];
 	total: number;
@@ -253,9 +279,9 @@ export interface SearchResponse {
 	totalPages: number;
 }
 
-export function searchTfidf(q: string, page = 1, size = 15, minScore = 0.0) {
+export function searchTfidf(q: string, page = 1, size = 15, minScore = 0.0, sort = 'relevance') {
 	return request<SearchResponse>(
-		`/api/search/tfidf?q=${encodeURIComponent(q)}&page=${page}&size=${size}&min_score=${minScore}`
+		`/api/search/tfidf?q=${encodeURIComponent(q)}&page=${page}&size=${size}&min_score=${minScore}&sort=${sort}`
 	);
 }
 
@@ -361,6 +387,137 @@ export function getMyProfile() {
 	return request<UserProfile>('/api/users/me/profile', { auth: true });
 }
 
+export function updateProfile(payload: { displayName?: string; email?: string }) {
+	return request<{ user: PublicUser; message: string }>('/api/users/me', {
+		method: 'PATCH',
+		body: payload,
+		auth: true
+	});
+}
+
 export function getUserProfile(userId: string) {
 	return request<UserProfile>(`/api/users/${userId}`);
 }
+
+// ---- Bookmarks ----
+export function toggleBookmark(questionId: string) {
+	return request<{ bookmarked: boolean; message: string }>('/api/bookmarks', {
+		method: 'POST',
+		body: { questionId },
+		auth: true
+	});
+}
+
+export function checkBookmark(questionId: string) {
+	return request<{ bookmarked: boolean }>(`/api/bookmarks/me/${questionId}`, { auth: true });
+}
+
+export function listMyBookmarks(page = 1, limit = 15) {
+	return request<{
+		questions: { id: string; title: string; tags: string[]; voteScore: number; answerCount: number; createdAt: string }[];
+		total: number; page: number; limit: number; totalPages: number;
+	}>(`/api/bookmarks/me?page=${page}&limit=${limit}`, { auth: true });
+}
+
+// ---- Notifications ----
+export interface Notification {
+	id: string;
+	eventType: 'new_answer' | 'new_comment' | 'answer_accepted' | 'question_upvoted' | 'answer_upvoted';
+	actorName: string;
+	questionId: string;
+	questionTitle: string;
+	refId: string | null;
+	isRead: boolean;
+	createdAt: string;
+}
+
+export function listNotifications(page = 1, limit = 20) {
+	return request<{ notifications: Notification[]; total: number; page: number; limit: number; totalPages: number }>(
+		`/api/notifications?page=${page}&limit=${limit}`,
+		{ auth: true }
+	);
+}
+
+export function getUnreadCount() {
+	return request<{ unreadCount: number }>('/api/notifications/unread-count', { auth: true });
+}
+
+export function markAllRead() {
+	return request<{ markedRead: number }>('/api/notifications/read-all', { method: 'PATCH', auth: true });
+}
+
+export function markOneRead(notificationId: string) {
+	return request<{ ok: boolean }>(`/api/notifications/${notificationId}/read`, { method: 'PATCH', auth: true });
+}
+
+// ---- Related Questions ----
+export interface RelatedQuestion {
+	questionId: string;
+	title: string;
+	tags: string[];
+	voteScore: number;
+	answerCount: number;
+	similarityScore: number;
+	similarityPercent: number;
+}
+
+export function getRelatedQuestions(questionId: string, limit = 5) {
+	return request<{ related: RelatedQuestion[] }>(`/api/questions/${questionId}/related?limit=${limit}`);
+}
+
+// ---- Leaderboard Users ----
+export interface LeaderboardUser {
+	id: string;
+	username: string;
+	displayName: string;
+	reputation: number;
+	isAdmin: boolean;
+	badgeCount: number;
+	badges: { badgeCode: string; name: string; tier: string; description: string }[];
+	createdAt: string;
+}
+
+export function listUsers(page = 1, limit = 20, q = '', sort = 'reputation') {
+	return request<{ users: LeaderboardUser[]; total: number; page: number; limit: number; totalPages: number }>(
+		`/api/users?page=${page}&limit=${limit}&q=${encodeURIComponent(q)}&sort=${sort}`
+	);
+}
+
+// ---- Revisions, Close, Bounty ----
+export interface Revision {
+	id: string;
+	title?: string;
+	body: string;
+	editorId: string;
+	editorName: string;
+	comment: string;
+	createdAt: string;
+}
+
+export function getQuestionRevisions(questionId: string) {
+	return request<{ revisions: Revision[] }>(`/api/questions/${questionId}/revisions`);
+}
+
+export function closeQuestion(questionId: string, reason: string) {
+	return request<{ message: string }>(`/api/questions/${questionId}/close`, {
+		method: 'POST',
+		body: { reason },
+		auth: true
+	});
+}
+
+export function reopenQuestion(questionId: string) {
+	return request<{ message: string }>(`/api/questions/${questionId}/reopen`, {
+		method: 'POST',
+		auth: true
+	});
+}
+
+export function setBounty(questionId: string, amount: number) {
+	return request<{ message: string }>(`/api/questions/${questionId}/bounty`, {
+		method: 'POST',
+		body: { amount },
+		auth: true
+	});
+}
+

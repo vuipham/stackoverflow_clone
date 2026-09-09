@@ -21,13 +21,23 @@
 <div class="user-card">
 	<div class="card-action-time">{label} {formatDate(date)}</div>
 	<div class="user-details">
-		<div class="avatar-box">
-			{(author?.displayName ?? 'U').charAt(0).toUpperCase()}
-		</div>
-		<div class="user-info-meta">
-			<span class="user-name">{author?.displayName ?? 'Thành viên'}</span>
-			<span class="user-rep">{author?.reputation?.toLocaleString('vi-VN') ?? 1} <small>rep</small></span>
-		</div>
+		{#if author?.id}
+			<a href={`/profile?id=${author.id}`} class="avatar-box" title="Xem hồ sơ">
+				{(author?.displayName ?? 'U').charAt(0).toUpperCase()}
+			</a>
+			<div class="user-info-meta">
+				<a href={`/profile?id=${author.id}`} class="user-name" title="Xem hồ sơ">{author?.displayName ?? 'Thành viên'}</a>
+				<span class="user-rep">{author?.reputation?.toLocaleString('vi-VN') ?? 1} <small>rep</small></span>
+			</div>
+		{:else}
+			<div class="avatar-box">
+				{(author?.displayName ?? 'U').charAt(0).toUpperCase()}
+			</div>
+			<div class="user-info-meta">
+				<span class="user-name">{author?.displayName ?? 'Thành viên'}</span>
+				<span class="user-rep">{author?.reputation?.toLocaleString('vi-VN') ?? 1} <small>rep</small></span>
+			</div>
+		{/if}
 	</div>
 </div>
 
@@ -66,6 +76,7 @@
 		align-items: center;
 		justify-content: center;
 		flex-shrink: 0;
+		text-decoration: none;
 	}
 
 	.user-info-meta {
@@ -77,6 +88,11 @@
 	.user-name {
 		color: #0074cc;
 		font-weight: 600;
+		text-decoration: none;
+	}
+
+	.user-name:hover {
+		text-decoration: underline;
 	}
 
 	.user-rep {

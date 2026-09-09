@@ -7,6 +7,7 @@ from app.core.security import get_current_user, require_reputation, check_owner_
 from app.core.privileges import PRIVILEGE, REPUTATION_DELTA
 from app.models.answer import AnswerCreateRequest, AnswerUpdateRequest
 from app.services.reputation_service import adjust_reputation
+from app.services import notification_service
 
 # Router lồng trong /api/questions/{question_id}/answers để tạo/liệt kê,
 # và /api/answers/{answer_id} để sửa/xóa/accept - gộp chung 1 router cho gọn.
@@ -80,6 +81,8 @@ async def create_answer(
     current_user: dict = Depends(require_reputation(PRIVILEGE["ASK_ANSWER"])),
 ):
     q = await _get_question_or_404(question_id)
+    if q.get("isClosed"):
+        raise HTTPException(status_code=400, detail="Câu hỏi này đã bị đóng, không thể trả lời thêm")
 
     now = datetime.now(timezone.utc)
     doc = {
@@ -94,6 +97,20 @@ async def create_answer(
     doc["_id"] = result.inserted_id
 
     await questions_col.update_one({"_id": q["_id"]}, {"$inc": {"answerCount": 1}})
+    from app.services import badge_service
+    await badge_service.evaluate_user_badges(current_user["_id"])
+
+    # Thông báo cho tác giả câu hỏi (nếu không phải chính mình)
+    if str(q["authorId"]) != str(current_user["_id"]):
+        await notification_service.push(
+            recipient_id=q["authorId"],
+            event_type="new_answer",
+            actor_name=current_user.get("displayName", current_user["username"]),
+            question_id=str(q["_id"]),
+            question_title=q["title"],
+            ref_id=str(doc["_id"]),
+        )
+
     return {"answer": await serialize_answer(doc)}
 
 
@@ -155,8 +172,32 @@ async def accept_answer(answer_id: str, current_user: dict = Depends(get_current
         await answers_col.update_one({"_id": q["acceptedAnswerId"]}, {"$set": {"isAccepted": False}})
 
     await answers_col.update_one({"_id": a["_id"]}, {"$set": {"isAccepted": True}})
-    await questions_col.update_one({"_id": q["_id"]}, {"$set": {"acceptedAnswerId": a["_id"]}})
+    
+    bounty_amount = q.get("bounty", 0)
+    bounty_update = {"acceptedAnswerId": a["_id"]}
+    if bounty_amount > 0:
+        # Chuyển bounty rep cho tác giả câu trả lời
+        await adjust_reputation(str(a["authorId"]), bounty_amount, "bounty_won", str(q["_id"]))
+        bounty_update["bounty"] = 0
+        bounty_update["bountyExpiresAt"] = None
+
+    await questions_col.update_one({"_id": q["_id"]}, {"$set": bounty_update})
     await adjust_reputation(str(a["authorId"]), REPUTATION_DELTA["ANSWER_ACCEPTED"], "answer_accepted", str(a["_id"]))
+
+    from app.services import badge_service
+    await badge_service.evaluate_user_badges(a["authorId"])
+    await badge_service.evaluate_user_badges(q["authorId"])
+
+    # Thông báo cho tác giả câu trả lời (nếu không phải chính mình)
+    if str(a["authorId"]) != str(current_user["_id"]):
+        await notification_service.push(
+            recipient_id=a["authorId"],
+            event_type="answer_accepted",
+            actor_name=current_user.get("displayName", current_user["username"]),
+            question_id=str(q["_id"]),
+            question_title=q["title"],
+            ref_id=str(a["_id"]),
+        )
 
     updated = await answers_col.find_one({"_id": a["_id"]})
     return {"answer": await serialize_answer(updated)}

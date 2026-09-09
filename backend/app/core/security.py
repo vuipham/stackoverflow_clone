@@ -10,6 +10,27 @@ from app.core.database import users_col
 
 security = HTTPBearer()
 
+# HTTPBearer không bắt buộc (auto_error=False) - dùng cho endpoint public nhưng
+# vẫn muốn biết user nếu có token (vd. search filter user:me).
+security_optional = HTTPBearer(auto_error=False)
+
+
+async def get_current_user_optional(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security_optional),
+) -> dict | None:
+    """Trả về user nếu có token hợp lệ, ngược lại None (không ném lỗi)."""
+    if credentials is None:
+        return None
+    token = credentials.credentials
+    try:
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=["HS256"])
+    except jwt.PyJWTError:
+        return None
+    user = await users_col.find_one({"_id": ObjectId(payload["userId"])})
+    if not user or user.get("isBanned"):
+        return None
+    return user
+
 
 def create_access_token(user_id: str) -> str:
     payload = {

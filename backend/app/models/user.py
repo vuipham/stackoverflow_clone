@@ -22,6 +22,14 @@ class UserLoginRequest(BaseModel):
     password: str
 
 
+class UserUpdateRequest(BaseModel):
+    """Cập nhật hồ sơ cá nhân (UC009) - chỉ chỉnh displayName / email.
+    username, reputation, isAdmin là bất biến, không nằm trong payload."""
+
+    displayName: Optional[str] = None
+    email: Optional[EmailStr] = None
+
+
 class UserPublic(BaseModel):
     id: str
     username: str
