@@ -18,6 +18,7 @@
 		type Tag,
 		type BenchmarkLogEntry
 	} from '$lib/api/client';
+	import { showToast } from '$lib/stores/toast';
 
 	let users = $state<AdminUser[]>([]);
 	let tags = $state<Tag[]>([]);
@@ -57,22 +58,37 @@
 	}
 
 	async function toggleBan(u: AdminUser) {
-		const res = await adminBanUser(u.id, !u.isBanned);
-		users = users.map((x) => (x.id === u.id ? res.user : x));
+		try {
+			const res = await adminBanUser(u.id, !u.isBanned);
+			users = users.map((x) => (x.id === u.id ? res.user : x));
+			showToast(res.user.isBanned ? `Đã khóa tài khoản @${res.user.username}` : `Đã mở khóa tài khoản @${res.user.username}`, 'success');
+		} catch (err) {
+			showToast(err instanceof ApiError ? String(err.detail) : 'Thao tác thất bại', 'error');
+		}
 	}
 
 	async function applyDelta(u: AdminUser) {
 		const delta = repDelta[u.id];
 		if (!delta) return;
-		const res = await adminAdjustReputation(u.id, delta);
-		users = users.map((x) => (x.id === u.id ? res.user : x));
-		repDelta[u.id] = 0;
+		try {
+			const res = await adminAdjustReputation(u.id, delta);
+			users = users.map((x) => (x.id === u.id ? res.user : x));
+			repDelta[u.id] = 0;
+			showToast(`Đã điều chỉnh ${delta > 0 ? '+' : ''}${delta} rep cho @${res.user.username}`, 'success');
+		} catch (err) {
+			showToast(err instanceof ApiError ? String(err.detail) : 'Điều chỉnh reputation thất bại', 'error');
+		}
 	}
 
 	async function removeTag(t: Tag) {
 		if (!confirm(`Xóa tag "${t.name}"? (không tự xóa tag khỏi câu hỏi đã gắn)`)) return;
-		await deleteTag(t.id);
-		tags = tags.filter((x) => x.id !== t.id);
+		try {
+			await deleteTag(t.id);
+			tags = tags.filter((x) => x.id !== t.id);
+			showToast(`Đã xóa tag "${t.name}"`, 'success');
+		} catch (err) {
+			showToast(err instanceof ApiError ? String(err.detail) : 'Xóa tag thất bại', 'error');
+		}
 	}
 
 	async function editTagName(t: Tag) {
@@ -81,16 +97,23 @@
 		try {
 			const res = await updateTag(t.id, { name: newName.trim() });
 			tags = tags.map((x) => (x.id === t.id ? res.tag : x));
+			showToast(`Đã đổi tên tag thành "${res.tag.name}"`, 'success');
 		} catch (err) {
-			alert(err instanceof ApiError ? String(err.detail) : 'Đổi tên thất bại');
+			const msg = err instanceof ApiError ? String(err.detail) : 'Đổi tên thất bại';
+			showToast(msg, 'error');
 		}
 	}
 
 	async function editTagDescription(t: Tag) {
 		const desc = prompt(`Mô tả mới cho tag "${t.name}":`, t.description);
 		if (desc === null) return;
-		const res = await updateTag(t.id, { description: desc });
-		tags = tags.map((x) => (x.id === t.id ? res.tag : x));
+		try {
+			const res = await updateTag(t.id, { description: desc });
+			tags = tags.map((x) => (x.id === t.id ? res.tag : x));
+			showToast(`Đã cập nhật mô tả tag "${res.tag.name}"`, 'success');
+		} catch (err) {
+			showToast(err instanceof ApiError ? String(err.detail) : 'Cập nhật mô tả thất bại', 'error');
+		}
 	}
 
 	async function runReindex() {
@@ -99,10 +122,13 @@
 		try {
 			const res = await adminTriggerReindex();
 			reindexResult = JSON.stringify(res, null, 2);
+			const idx = (res as { tfidf?: { indexed?: number } }).tfidf?.indexed;
+			showToast(idx != null ? `Reindex hoàn tất: ${idx} câu hỏi` : 'Reindex hoàn tất', 'success');
 			const lRes = await adminGetBenchmarkLog(20);
 			logs = lRes.logs;
 		} catch (err) {
 			reindexResult = err instanceof ApiError ? `Lỗi: ${String(err.detail)}` : 'Reindex thất bại';
+			showToast(err instanceof ApiError ? String(err.detail) : 'Reindex thất bại', 'error');
 		} finally {
 			reindexing = false;
 		}

@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.database import ensure_indexes
-from app.routers import auth, questions, votes, answers, comments, tags, admin, search, users
+from app.routers import auth, questions, votes, answers, comments, tags, admin, search, users, bookmarks, notifications
 from app.services.search import tfidf_service
 
 
@@ -38,6 +38,8 @@ app.include_router(tags.router)
 app.include_router(admin.router)
 app.include_router(search.router)
 app.include_router(users.router)
+app.include_router(bookmarks.router)
+app.include_router(notifications.router)
 
 
 @app.get("/health")

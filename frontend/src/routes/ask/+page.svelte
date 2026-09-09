@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { createQuestion, ApiError } from '$lib/api/client';
 	import { currentUser, authReady } from '$lib/stores/auth';
+	import { showToast } from '$lib/stores/toast';
 	import { goto } from '$app/navigation';
 	import MarkdownRenderer from '$lib/components/MarkdownRenderer.svelte';
 
@@ -29,6 +30,7 @@
 				.map((t) => t.trim().toLowerCase())
 				.filter(Boolean);
 			const { question } = await createQuestion({ title, body, tags });
+			showToast('Đã đăng câu hỏi thành công', 'success');
 			goto(`/questions/${question.id}`);
 		} catch (err) {
 			if (err instanceof ApiError) {
@@ -37,6 +39,7 @@
 			} else {
 				error = 'Tạo câu hỏi thất bại';
 			}
+			showToast(error, 'error');
 		} finally {
 			loading = false;
 		}

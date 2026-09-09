@@ -8,6 +8,7 @@ from app.core.security import get_current_user
 from app.core.privileges import PRIVILEGE, REPUTATION_DELTA
 from app.models.vote import VoteRequest
 from app.services.reputation_service import adjust_reputation
+from app.services import notification_service
 
 router = APIRouter(prefix="/api/votes", tags=["votes"])
 
@@ -142,6 +143,26 @@ async def cast_vote(payload: VoteRequest, current_user: dict = Depends(get_curre
     if payload.value == -1:
         await adjust_reputation(
             str(current_user["_id"]), REPUTATION_DELTA["DOWNVOTE_CAST"], "downvote_cast", str(target["_id"])
+        )
+
+    # Thông báo upvote cho tác giả (chỉ upvote, không spam thông báo downvote)
+    if payload.value == 1 and str(target["authorId"]) != str(current_user["_id"]):
+        event_type = "question_upvoted" if payload.targetType == "question" else "answer_upvoted"
+        q_title = target.get("title", "")
+        q_id = str(target["_id"])
+        # Nếu là upvote answer thì cần lấy tiêu đề cầu hỏi
+        if payload.targetType == "answer":
+            q_doc = await questions_col.find_one({"_id": target["questionId"]}, {"title": 1})
+            if q_doc:
+                q_title = q_doc["title"]
+                q_id = str(target["questionId"])
+        await notification_service.push(
+            recipient_id=target["authorId"],
+            event_type=event_type,
+            actor_name=current_user.get("displayName", current_user["username"]),
+            question_id=q_id,
+            question_title=q_title,
+            ref_id=str(target["_id"]),
         )
 
     return {"message": "Vote thành công", "newVoteScore": new_score, "action": "voted"}

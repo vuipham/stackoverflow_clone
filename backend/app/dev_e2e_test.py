@@ -21,8 +21,10 @@ db_module.comments_col = mock_db["comments"]
 db_module.votes_col = mock_db["votes"]
 db_module.tags_col = mock_db["tags"]
 db_module.question_vectors_tfidf_col = mock_db["question_vectors_tfidf"]
-db_module.tfidf_vocabulary_col = mock_db["tfidf_vocabulary"]
-db_module.search_benchmark_log_col = mock_db["search_benchmark_log"]
+db_module.bookmarks_col = mock_db["bookmarks"]
+db_module.notifications_col = mock_db["notifications"]
+db_module.revisions_col = mock_db["revisions"]
+db_module.user_badges_col = mock_db["user_badges"]
 
 # Patch lại reference trong các module đã import db trực tiếp
 import app.routers.auth as auth_router
@@ -33,9 +35,12 @@ import app.routers.tags as tags_router
 import app.routers.admin as admin_router
 import app.routers.votes as votes_router
 import app.routers.search as search_router
+import app.routers.users as users_router
 import app.services.reputation_service as reputation_service
 import app.services.tag_service as tag_service
 import app.services.search.tfidf_service as tfidf_service
+import app.services.badge_service as badge_service
+import app.services.revision_service as revision_service
 import app.core.security as security_module
 
 auth_router.users_col = mock_db["users"]
@@ -59,11 +64,20 @@ votes_router.answers_col = mock_db["answers"]
 votes_router.COLLECTION_BY_TYPE = {"question": mock_db["questions"], "answer": mock_db["answers"]}
 search_router.questions_col = mock_db["questions"]
 search_router.search_benchmark_log_col = mock_db["search_benchmark_log"]
+users_router.users_col = mock_db["users"]
+users_router.questions_col = mock_db["questions"]
+users_router.answers_col = mock_db["answers"]
 reputation_service.users_col = mock_db["users"]
 tag_service.tags_col = mock_db["tags"]
 tfidf_service.questions_col = mock_db["questions"]
 tfidf_service.question_vectors_tfidf_col = mock_db["question_vectors_tfidf"]
 tfidf_service.tfidf_vocabulary_col = mock_db["tfidf_vocabulary"]
+badge_service.user_badges_col = mock_db["user_badges"]
+badge_service.questions_col = mock_db["questions"]
+badge_service.answers_col = mock_db["answers"]
+badge_service.users_col = mock_db["users"]
+revision_service.revisions_col = mock_db["revisions"]
+revision_service.users_col = mock_db["users"]
 security_module.users_col = mock_db["users"]
 
 from fastapi.testclient import TestClient
@@ -265,7 +279,43 @@ async def run():
         check("Admin xem benchmark log thành công (200)", r.status_code == 200)
         check("Benchmark log có ghi nhận ít nhất 1 lượt search", len(r.json()["logs"]) >= 1)
 
-        print("\n✅ TẤT CẢ TEST END-TO-END ĐỀU PASS — logic reputation-gated hoạt động đúng thiết kế.")
+        # --- 16. Test New Features: Revisions, Users Leaderboard, Badges, Close, Bounty ---
+        r = client.get("/api/users")
+        check("Leaderboard Users trả về 200", r.status_code == 200)
+        check("Leaderboard trả về ít nhất 3 users", len(r.json()["users"]) >= 3)
+
+        r = client.get(f"/api/questions/{question_id}/revisions")
+        check("Lịch sử chỉnh sửa Revisions trả về 200", r.status_code == 200)
+        check("Revisions có ít nhất 2 bản ghi (v1 tao moi, v2 update)", len(r.json()["revisions"]) >= 2)
+
+        # Bounty test
+        r = client.post(f"/api/questions/{question_id}/bounty",
+                         headers={"Authorization": f"Bearer {critic_token}"},
+                         json={"amount": 50})
+        check("Set bounty +50 rep thành công (200)", r.status_code == 200)
+        q_bounty = client.get(f"/api/questions/{question_id}").json()["question"]
+        check("Bounty trên câu hỏi = 50", q_bounty["bounty"] == 50)
+
+        # Close question test
+        r = client.post(f"/api/questions/{question_id}/close",
+                         headers={"Authorization": f"Bearer {author_token}"},
+                         json={"reason": "Trùng lặp câu hỏi"})
+        check("Đóng câu hỏi thành công (200)", r.status_code == 200)
+        q_closed = client.get(f"/api/questions/{question_id}").json()["question"]
+        check("isClosed = True", q_closed["isClosed"] is True)
+
+        # Thử trả lời câu hỏi đã đóng -> 400
+        r = client.post(f"/api/questions/{question_id}/answers",
+                         headers={"Authorization": f"Bearer {poor_token}"},
+                         json={"body": "Trả lời thử khi bài đã đóng..."})
+        check("Không thể trả lời khi câu hỏi đã đóng (400)", r.status_code == 400)
+
+        # Reopen question
+        r = client.post(f"/api/questions/{question_id}/reopen",
+                         headers={"Authorization": f"Bearer {author_token}"})
+        check("Mở lại câu hỏi thành công (200)", r.status_code == 200)
+
+        print("\n✅ TẤT CẢ TEST END-TO-END VÀ TÍNH NĂNG MỚI ĐỀU PASS.")
 
 
 if __name__ == "__main__":

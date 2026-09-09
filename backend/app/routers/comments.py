@@ -6,6 +6,7 @@ from app.core.database import comments_col, questions_col, answers_col
 from app.core.security import get_current_user
 from app.core.privileges import PRIVILEGE
 from app.models.comment import CommentCreateRequest
+from app.services import notification_service
 
 router = APIRouter(prefix="/api/comments", tags=["comments"])
 
@@ -62,6 +63,27 @@ async def create_comment(payload: CommentCreateRequest, current_user: dict = Dep
     }
     result = await comments_col.insert_one(doc)
     doc["_id"] = result.inserted_id
+
+    # Thông báo cho tác giả bài viết được comment (nếu không phải chính mình)
+    if str(target["authorId"]) != str(current_user["_id"]):
+        # Lấy tiêu đề câu hỏi: nếu target là answer cần truy ngược lên question
+        from app.core.database import questions_col
+        if payload.targetType == "question":
+            q_id = str(target["_id"])
+            q_title = target.get("title", "")
+        else:  # answer
+            q_doc = await questions_col.find_one({"_id": target["questionId"]}, {"title": 1})
+            q_id = str(target["questionId"])
+            q_title = q_doc["title"] if q_doc else ""
+        await notification_service.push(
+            recipient_id=target["authorId"],
+            event_type="new_comment",
+            actor_name=current_user.get("displayName", current_user["username"]),
+            question_id=q_id,
+            question_title=q_title,
+            ref_id=str(doc["_id"]),
+        )
+
     return {"comment": serialize_comment(doc)}
 
 

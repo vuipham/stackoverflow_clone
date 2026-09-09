@@ -3,6 +3,9 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { currentUser, authReady, restoreSession, clearSession } from '$lib/stores/auth';
+	import NotificationBell from '$lib/components/NotificationBell.svelte';
+	import LeftSidebar from '$lib/components/LeftSidebar.svelte';
+	import Toasts from '$lib/components/Toasts.svelte';
 
 	let { children } = $props();
 	let searchQuery = $state('');
@@ -16,36 +19,30 @@
 		window.location.href = '/';
 	}
 
+	let showSearchHints = $state(false);
+
 	function handleHeaderSearch(e: Event) {
 		e.preventDefault();
 		if (!searchQuery.trim()) return;
+		showSearchHints = false;
 		goto(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
-		searchQuery = '';
 	}
 </script>
 
 <svelte:head>
 	<link rel="icon" href={favicon} />
-	<title>Knowledge Hub - Stack Overflow Clone</title>
+	<title>Knowledge Hub</title>
 </svelte:head>
 
 <div class="app-shell">
 	<header class="so-header">
 		<a href="/" class="brand">
-			<svg class="so-logo-icon" viewBox="0 0 32 37" width="24" height="24">
-				<path fill="#BCBBBB" d="M26 33v-9h4v13H0V24h4v9h22Z"/>
-				<path fill="#F48024" d="m21.5 0-2.7 2 9.9 13.3 2.7-2L21.5 0ZM26 18.4l-12-6.8 1.9-3.4 12 6.8-1.9 3.4ZM10.7 22.8l13.5-3.6.9 3.4-13.5 3.6-.9-3.4ZM8 28.5h14v4H8v-4Z"/>
+			<svg class="so-logo-icon" viewBox="0 0 24 24" width="24" height="24" fill="none">
+				<path fill="#0a95ff" d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5V5.5Z"/>
+				<path fill="#fff" d="M6.5 5H18v11H6.5A2.5 2.5 0 0 0 4 18.5V5.5A2.5 2.5 0 0 1 6.5 5Z" opacity="0"/>
 			</svg>
-			<span class="brand-name">Stack<b>Overflow</b> <small class="brand-sub">Clone</small></span>
+			<span class="brand-name">Knowledge <b>Hub</b></span>
 		</a>
-
-		<nav class="nav-links">
-			<a href="/questions">Câu hỏi</a>
-			<a href="/search">Tìm kiếm</a>
-			{#if $currentUser?.isAdmin}
-				<a href="/admin" class="admin-link">Quản trị</a>
-			{/if}
-		</nav>
 
 		<!-- Thanh tìm kiếm toàn cục (Global Search Bar) -->
 		<form onsubmit={handleHeaderSearch} class="header-search-form">
@@ -53,8 +50,25 @@
 			<input
 				type="text"
 				bind:value={searchQuery}
-				placeholder="Tìm kiếm câu hỏi (nhập từ khóa...)"
+				onfocus={() => (showSearchHints = true)}
+				onblur={() => setTimeout(() => (showSearchHints = false), 200)}
+				placeholder="Search..."
 			/>
+
+			{#if showSearchHints}
+				<div class="header-search-popover">
+					<div class="hints-grid">
+						<div class="hint-col">
+							<p><code>[tag]</code> <span>search within a tag</span></p>
+							<p><code>score:5</code> <span>posts with 5+ score</span></p>
+						</div>
+						<div class="hint-col">
+							<p><code>answers:0</code> <span>unanswered questions</span></p>
+							<p><code>is:accepted</code> <span>has accepted answer</span></p>
+						</div>
+					</div>
+				</div>
+			{/if}
 		</form>
 
 		<div class="auth-area">
@@ -62,6 +76,7 @@
 				<span class="muted">Đang tải...</span>
 			{:else if $currentUser}
 				<a href="/ask" class="btn-ask-sm">Đặt câu hỏi</a>
+				<NotificationBell />
 				<a href="/profile" class="rep-badge" title="Xem hồ sơ cá nhân">
 					<span class="avatar-circle">{$currentUser.displayName.charAt(0).toUpperCase()}</span>
 					<span class="user-name">{$currentUser.displayName}</span>
@@ -77,11 +92,16 @@
 	</header>
 
 	<div class="main-wrapper">
-		<main>
-			{@render children()}
-		</main>
+		<div class="layout-container">
+			<LeftSidebar />
+			<main>
+				{@render children()}
+			</main>
+		</div>
 	</div>
 </div>
+
+<Toasts />
 
 <style>
 	:global(body) {
@@ -127,15 +147,11 @@
 
 	.brand-name b {
 		font-weight: 700;
+		color: #0a95ff;
 	}
 
-	.brand-sub {
-		font-size: 0.75rem;
-		color: #6a737c;
-		background: #e1ecf4;
-		padding: 0.1rem 0.35rem;
-		border-radius: 3px;
-		margin-left: 0.2rem;
+	.so-logo-icon {
+		border-radius: 4px;
 	}
 
 	.nav-links {
@@ -311,15 +327,70 @@
 		background: white;
 	}
 
-	main {
-		max-width: 1100px;
+	.layout-container {
+		max-width: 1260px;
 		width: 100%;
 		margin: 0 auto;
+		display: flex;
+		min-height: calc(100vh - 56px);
+	}
+
+	main {
+		flex: 1;
+		min-width: 0;
 		padding: 1.5rem;
 		box-sizing: border-box;
 	}
 
 	.muted {
 		color: #8a94a3;
+	}
+
+	/* Search Popover */
+	.header-search-popover {
+		position: absolute;
+		top: 100%;
+		left: 0;
+		right: 0;
+		margin-top: 6px;
+		background: white;
+		border: 1px solid #babfc4;
+		border-radius: 5px;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+		padding: 0.8rem 1rem;
+		z-index: 1000;
+	}
+
+	.hints-grid {
+		display: flex;
+		gap: 1.5rem;
+	}
+
+	.hint-col {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+	}
+
+	.hint-col p {
+		margin: 0;
+		font-size: 0.78rem;
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+	}
+
+	.hint-col code {
+		background: #e3e6e8;
+		padding: 0.1rem 0.35rem;
+		border-radius: 3px;
+		font-size: 0.75rem;
+		color: #0c0d0e;
+		font-weight: 600;
+	}
+
+	.hint-col span {
+		color: #6a737c;
 	}
 </style>

@@ -1,11 +1,31 @@
 <script lang="ts">
-	let hotQuestions = [
-		{ id: '1', title: 'Cách tối ưu truy vấn MongoDB trên 1.000.000 bản ghi?' },
-		{ id: '2', title: 'Phân biệt giữa TF-IDF và Vector Embeddings trong Semantic Search?' },
-		{ id: '3', title: 'Tại sao FastAPI nhanh hơn Flask trong xử lý bất đồng bộ?' },
-		{ id: '4', title: 'Best practice thiết lập JWT Authentication trong microservices?' },
-		{ id: '5', title: 'Cách phòng chống SQL Injection và XSS trong web app?' }
+	import { onMount } from 'svelte';
+	import { listQuestions } from '$lib/api/client';
+
+	interface HotQuestion {
+		id: string;
+		title: string;
+	}
+
+	// Dự phòng: nếu API lỗi thì vẫn hiển thị nội dung, link tới trang tìm kiếm
+	let blogPosts = [
+		{ title: 'Tối ưu hóa công cụ tìm kiếm tri thức quy mô 1 triệu bản ghi' },
+		{ title: 'Hệ thống tính điểm Reputation và Phân quyền theo ngưỡng' }
 	];
+	let metaPosts = [{ title: 'Thảo luận về nâng cấp thuật toán TF-IDF Search Engine' }];
+	let hotQuestions = $state<HotQuestion[] | null>(null);
+	let loaded = $state(false);
+
+	onMount(async () => {
+		try {
+			const res = await listQuestions(undefined, 1, 5, 'votes');
+			hotQuestions = res.questions.map((q) => ({ id: q.id, title: q.title }));
+		} catch {
+			hotQuestions = [];
+		} finally {
+			loaded = true;
+		}
+	});
 </script>
 
 <aside class="so-sidebar">
@@ -13,21 +33,21 @@
 	<div class="sidebar-box yellow-box">
 		<div class="box-header">The Overflow Blog</div>
 		<ul class="box-list">
-			<li>
-				<span class="icon">✏️</span>
-				<a href="/questions">Tối ưu hóa công cụ tìm kiếm tri thức quy mô 1 triệu bản ghi</a>
-			</li>
-			<li>
-				<span class="icon">✏️</span>
-				<a href="/questions">Hệ thống tính điểm Reputation và Phân quyền theo ngưỡng</a>
-			</li>
+			{#each blogPosts as bp}
+				<li>
+					<span class="icon">✏️</span>
+					<a href={`/search?q=${encodeURIComponent(bp.title)}`}>{bp.title}</a>
+				</li>
+			{/each}
 		</ul>
 		<div class="box-header">Featured on Meta</div>
 		<ul class="box-list">
-			<li>
-				<span class="icon">💬</span>
-				<a href="/questions">Thảo luận về nâng cấp thuật toán TF-IDF Search Engine</a>
-			</li>
+			{#each metaPosts as mp}
+				<li>
+					<span class="icon">💬</span>
+					<a href={`/search?q=${encodeURIComponent(mp.title)}`}>{mp.title}</a>
+				</li>
+			{/each}
 		</ul>
 	</div>
 
@@ -35,12 +55,18 @@
 	<div class="sidebar-box">
 		<div class="box-header plain">Hot Network Questions</div>
 		<ul class="hot-list">
-			{#each hotQuestions as hq}
-				<li>
-					<span class="hot-icon">🔥</span>
-					<a href="/questions">{hq.title}</a>
-				</li>
-			{/each}
+			{#if !loaded}
+				<li><span class="hot-icon">🔥</span><span class="muted-item">Đang tải...</span></li>
+			{:else if hotQuestions && hotQuestions.length > 0}
+				{#each hotQuestions as hq}
+					<li>
+						<span class="hot-icon">🔥</span>
+						<a href={`/questions/${hq.id}`}>{hq.title}</a>
+					</li>
+				{/each}
+			{:else}
+				<li><span class="hot-icon">🔥</span><span class="muted-item">Chưa có câu hỏi nào.</span></li>
+			{/if}
 		</ul>
 	</div>
 </aside>
@@ -140,5 +166,9 @@
 
 	.hot-icon {
 		font-size: 0.9rem;
+	}
+
+	.muted-item {
+		color: #8a94a3;
 	}
 </style>

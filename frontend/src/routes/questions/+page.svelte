@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { listQuestions, listTags, type Question, type Tag } from '$lib/api/client';
 	import RightSidebar from '$lib/components/RightSidebar.svelte';
@@ -17,40 +16,44 @@
 
 	let activeTag = $derived(page.url.searchParams.get('tag') ?? '');
 
-	async function load(tag: string, p = 1, limit = pageSize, sort = currentSort) {
+	// Bộ đếm để loại bỏ phản hồi cũ: chỉ request mới nhất được phép ghi vào state.
+	// Tránh tình trạng request chậm trả về trước overwrite kết quả của bộ lọc vừa chọn.
+	let requestSeq = 0;
+
+	async function load(tag: string, p: number, limit: number, sort: string) {
+		const seq = ++requestSeq;
 		loading = true;
 		errorMsg = '';
 		try {
 			const [qRes, tRes] = await Promise.all([listQuestions(tag || undefined, p, limit, sort), listTags()]);
+			if (seq !== requestSeq) return; // có request mới hơn, bỏ qua kết quả cũ
 			questions = qRes.questions;
 			totalQuestions = qRes.total;
 			totalPages = qRes.totalPages;
 			currentPage = qRes.page;
 			tags = tRes.tags.slice(0, 20);
 		} catch {
+			if (seq !== requestSeq) return;
 			errorMsg = 'Không tải được danh sách câu hỏi. Kiểm tra backend đã chạy chưa (http://localhost:8000).';
 		} finally {
-			loading = false;
+			if (seq === requestSeq) loading = false;
 		}
 	}
 
 	function setSort(sort: 'newest' | 'votes' | 'active' | 'unanswered') {
 		currentSort = sort;
 		currentPage = 1;
-		load(activeTag, 1, pageSize, sort);
 	}
 
 	function goToPage(p: number) {
 		if (p < 1 || p > totalPages || p === currentPage) return;
 		currentPage = p;
-		load(activeTag, p, pageSize, currentSort);
 		window.scrollTo({ top: 0, behavior: 'smooth' });
 	}
 
 	function changePageSize(size: number) {
 		pageSize = size;
 		currentPage = 1;
-		load(activeTag, 1, size, currentSort);
 	}
 
 	function getPageNumbers(current: number, total: number): (number | string)[] {
@@ -65,9 +68,10 @@
 		return pages;
 	}
 
-	onMount(() => load(activeTag, 1, pageSize, currentSort));
+	// Mọi thay đổi về tag, sort, phân trang, kích thước trang đều được gom lại ở đây
+	// và chỉ gọi load() MỘT lần duy nhất (chạy cả lúc mount lẫn khi dependency đổi).
 	$effect(() => {
-		load(activeTag, 1, pageSize, currentSort);
+		load(activeTag, currentPage, pageSize, currentSort);
 	});
 </script>
 

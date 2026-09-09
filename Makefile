@@ -14,6 +14,7 @@ MONGO_NAME    := mongo
 MONGO_PORT    := 27017
 BACKEND_PORT  := 8000
 FRONTEND_PORT := 5173
+REPEAT        ?= 3  # Số lần đo mỗi query khi chạy make benchmark (override: make benchmark REPEAT=5)
 
 # ---------- Màu sắc cho output ----------
 GREEN  := \033[0;32m
@@ -66,7 +67,7 @@ env:
 	@if [ ! -f $(FRONTEND_DIR)/.env ]; then \
 		echo "$(CYAN)⏳ Tạo frontend/.env...$(NC)"; \
 		cp $(FRONTEND_DIR)/.env.example $(FRONTEND_DIR)/.env 2>/dev/null || \
-		printf 'VITE_API_BASE_URL=http://localhost:8000\n' > $(FRONTEND_DIR)/.env; \
+		printf 'VITE_API_BASE_URL=\n' > $(FRONTEND_DIR)/.env; \
 	else \
 		echo "$(YELLOW)ℹ️  frontend/.env đã tồn tại, bỏ qua.$(NC)"; \
 	fi
@@ -180,10 +181,10 @@ test: ## Chạy test end-to-end
 	@echo "$(CYAN)⏳ Chạy test end-to-end...$(NC)"
 	cd $(BACKEND_DIR) && $(PYTHON) -m app.dev_e2e_test
 
-## Chạy benchmark TF-IDF (cần MongoDB thật + đã seed)
+## Chạy benchmark TF-IDF qua API backend đang chạy (mặc định đo 3 lần/query)
 benchmark: ## Chạy benchmark TF-IDF
-	@echo "$(CYAN)⏳ Chạy benchmark TF-IDF...$(NC)"
-	cd $(BACKEND_DIR) && $(PYTHON) -m app.benchmark_search
+	@echo "$(CYAN)⏳ Chạy benchmark TF-IDF ($(REPEAT) lần/query)...$(NC)"
+	cd $(BACKEND_DIR) && $(PYTHON) -m app.benchmark_search --repeat $(REPEAT)
 
 ## Reindex toàn bộ dữ liệu tìm kiếm (cần backend đang chạy)
 reindex: ## Reindex toàn bộ chỉ mục TF-IDF

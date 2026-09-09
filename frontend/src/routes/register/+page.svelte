@@ -27,7 +27,7 @@
 </script>
 
 <h1>Đăng ký tài khoản</h1>
-<p class="note">Reputation mặc định khi tạo tài khoản mới là <strong>1 điểm</strong> — đúng như cơ chế thật của Stack Overflow.</p>
+<p class="note">Reputation mặc định khi tạo tài khoản mới là <strong>1 điểm</strong> — mô hình phân quyền theo điểm uy tín (reputation).</p>
 
 <form onsubmit={handleSubmit}>
 	<label>

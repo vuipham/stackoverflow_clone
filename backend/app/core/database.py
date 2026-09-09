@@ -14,6 +14,10 @@ tags_col = db["tags"]
 question_vectors_tfidf_col = db["question_vectors_tfidf"]
 tfidf_vocabulary_col = db["tfidf_vocabulary"]
 search_benchmark_log_col = db["search_benchmark_log"]  # log thời gian phản hồi mỗi lần search - dùng cho báo cáo
+bookmarks_col = db["bookmarks"]      # user lưu câu hỏi yêu thích
+notifications_col = db["notifications"]  # thông báo real-time (answer, comment, accept, upvote)
+revisions_col = db["revisions"]      # lịch sử chỉnh sửa bài viết (edit history)
+user_badges_col = db["user_badges"]  # huy hiệu đạt được của user
 
 
 async def ensure_indexes():
@@ -26,8 +30,25 @@ async def ensure_indexes():
     await questions_col.create_index([("tags", 1)])
     await questions_col.create_index([("createdAt", -1)])
     await questions_col.create_index("isIndexed")
+    # Badge/reputation truy vấn theo tác giả - thiếu index này sẽ quét toàn bộ
+    # collection (1M+ doc) mỗi lần xem câu hỏi, gây treo rất lâu.
+    await questions_col.create_index("authorId")
 
     await answers_col.create_index("questionId")
+    await answers_col.create_index("authorId")
     await comments_col.create_index([("targetType", 1), ("targetId", 1)])
     await votes_col.create_index([("userId", 1), ("targetType", 1), ("targetId", 1)], unique=True)
     await tags_col.create_index("name", unique=True)
+
+    # Bookmarks: mỗi user chỉ bookmark 1 câu hỏi 1 lần
+    await bookmarks_col.create_index([("userId", 1), ("questionId", 1)], unique=True)
+    await bookmarks_col.create_index([("userId", 1), ("createdAt", -1)])
+
+    # Notifications: index theo recipient + unread để count nhanh
+    await notifications_col.create_index([("recipientId", 1), ("isRead", 1), ("createdAt", -1)])
+    await notifications_col.create_index([("recipientId", 1), ("createdAt", -1)])
+
+    # Revisions & Badges
+    await revisions_col.create_index([("targetType", 1), ("targetId", 1), ("createdAt", -1)])
+    await user_badges_col.create_index([("userId", 1), ("badgeCode", 1)], unique=True)
+    await user_badges_col.create_index([("userId", 1), ("earnedAt", -1)])

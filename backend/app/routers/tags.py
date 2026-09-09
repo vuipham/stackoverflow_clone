@@ -19,7 +19,9 @@ def serialize_tag(t: dict) -> dict:
 
 @router.get("")
 async def list_tags():
-    cursor = tags_col.find({}).sort("questionCount", -1)
+        # Chỉ hiển thị tag đang có câu hỏi thật - tránh tag ma orphan
+    # (bị reset dữ liệu seeds mà không xóa tags_col) làm tag cloud hiện tag mà bấm vào rỗng.
+    cursor = tags_col.find({"questionCount": {"$gte": 1}}).sort("questionCount", -1)
     tags = [serialize_tag(t) async for t in cursor]
     return {"tags": tags}
 
